@@ -1,0 +1,64 @@
+{
+  "name": "PayamBar",
+  "short_name": "PayamBar",
+  "description": "A minimal Telegram-like messenger",
+  "start_url": "/",
+  "display": "standalone",
+  "scope": "/",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "dir": "rtl",
+  "lang": "fa",
+  "icons": [
+    {
+      "src": "/favicon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/favicon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-540.png",
+      "sizes": "540x720",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/screenshot-1280.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "جستجوی مکالمات",
+      "short_name": "جستجو",
+      "description": "جستجو در مکالمات",
+      "url": "/?search=true",
+      "icons": [{ "src": "/favicon-96.png", "sizes": "96x96" }]
+    }
+  ],
+  "categories": ["productivity", "social"],
+  "prefer_related_applications": false
+}

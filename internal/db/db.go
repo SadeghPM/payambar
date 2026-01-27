@@ -1,0 +1,111 @@
+package db
+
+import (
+	"database/sql"
+	"fmt"
+	"time"
+
+	_ "github.com/mattn/go-sqlite3"
+)
+
+type DB struct {
+	conn *sql.DB
+}
+
+func New(path string) (*DB, error) {
+	conn, err := sql.Open("sqlite3", path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	// Test connection
+	if err := conn.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	// Configure connection pool
+	conn.SetMaxOpenConns(25)
+	conn.SetMaxIdleConns(5)
+	conn.SetConnMaxLifetime(5 * time.Minute)
+
+	db := &DB{conn: conn}
+
+	// Run migrations
+	if err := db.migrate(); err != nil {
+		return nil, fmt.Errorf("migration failed: %w", err)
+	}
+
+	return db, nil
+}
+
+func (db *DB) migrate() error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS users (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		username TEXT UNIQUE NOT NULL,
+		password_hash TEXT NOT NULL,
+		display_name TEXT,
+		avatar_url TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS conversations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		participants TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS messages (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		sender_id INTEGER NOT NULL,
+		receiver_id INTEGER NOT NULL,
+		content TEXT NOT NULL,
+		status TEXT DEFAULT 'sent',
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		delivered_at TIMESTAMP,
+		read_at TIMESTAMP,
+		FOREIGN KEY (sender_id) REFERENCES users(id),
+		FOREIGN KEY (receiver_id) REFERENCES users(id)
+	);
+
+	CREATE TABLE IF NOT EXISTS files (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		message_id INTEGER NOT NULL,
+		file_name TEXT NOT NULL,
+		file_path TEXT NOT NULL,
+		file_size INTEGER NOT NULL,
+		content_type TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (message_id) REFERENCES messages(id)
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_messages_sender_receiver ON messages(sender_id, receiver_id);
+	CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_id);
+	CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
+	CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(receiver_id, sender_id, read_at);
+	CREATE INDEX IF NOT EXISTS idx_files_message_id ON files(message_id);
+	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+	CREATE INDEX IF NOT EXISTS idx_conversations_participants ON conversations(participants);
+	`
+
+	_, err := db.conn.Exec(schema)
+	if err != nil {
+		return err
+	}
+
+	// Add display_name and avatar_url columns if they don't exist (migration for existing databases)
+	db.conn.Exec("ALTER TABLE users ADD COLUMN display_name TEXT")
+	db.conn.Exec("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+
+	return nil
+}
+
+func (db *DB) Close() error {
+	return db.conn.Close()
+}
+
+func (db *DB) GetConn() *sql.DB {
+	return db.conn
+}

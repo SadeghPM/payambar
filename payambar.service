@@ -1,0 +1,19 @@
+[Unit]
+Description=Payambar server
+After=network.target
+
+[Service]
+User=payambar
+Group=payambar
+WorkingDirectory=/opt/payambar
+ExecStart=/opt/payambar/payambar
+Environment=PORT=8082
+Environment=JWT_SECRET=5lYDZorjiC7TSMJahcjwitjuwKbuWvoMoP38VmiqZw0
+Environment=DATABASE_PATH=/opt/payambar/data/payambar.db
+Environment=FILE_STORAGE_PATH=/opt/payambar/data/uploads
+Restart=on-failure
+RestartSec=5s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
