@@ -1,6 +1,6 @@
 # Payambar - Minimal Telegram-like Messenger
 
-A minimal 1-to-1 messaging system built with Go (backend), WebSocket (real-time), SQLite (database), and vanilla JavaScript PWA (frontend).
+A minimal 1-to-1 messaging system built with Go 1.25+ (backend), WebSocket (real-time), SQLite (database), and vanilla JavaScript PWA (frontend).
 
 ## Features
 
@@ -58,17 +58,18 @@ PORT=8080 \
 ### Docker
 
 ```bash
-# Build Docker image
-make docker-build
-
-# Run with docker-compose
+# Using pre-built image from GitHub Container Registry
 docker-compose up -d
 
-# Or run standalone
+# Or run standalone with GHCR image
 docker run -p 8080:8080 \
   -e JWT_SECRET=your-secret-key \
   -v payambar_data:/data \
-  payambar:latest
+  ghcr.io/sadeghpm/payambar:latest
+
+# Or build locally
+make docker-build
+docker-compose up -d
 ```
 
 ## Project Structure
@@ -116,9 +117,17 @@ payambar/
 - `GET /users/{username}` - Get public user profile
 - `GET /health` - Health check
 
-## Deployment to VPS + CDN
+## Deployment
 
-### 1. VPS Setup
+### GitHub Actions CI/CD
+
+Push to `main` automatically triggers:
+- **Binary builds**: Linux (amd64) and macOS (arm64) binaries
+- **Docker image**: Published to GitHub Container Registry at `ghcr.io/sadeghpm/payambar:latest`
+
+Download pre-built binaries from GitHub Actions artifacts or pull the Docker image directly.
+
+### VPS Setup
 
 ```bash
 # SSH into VPS (Hetzner, DigitalOcean, etc.)
@@ -128,13 +137,18 @@ ssh root@your-vps-ip
 curl -fsSL https://get.docker.com -o get-docker.sh
 sh get-docker.sh
 
-# Clone repo and run
-git clone <repo-url> payambar
-cd payambar
+# Create project directory and download docker-compose.yml
+mkdir -p payambar && cd payambar
+wget https://raw.githubusercontent.com/sadeghpm/payambar/main/docker-compose.yml
+
+# Set environment variables
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+
+# Pull and run pre-built image from GHCR
 docker-compose up -d
 
 # Enable auto-start on reboot
-docker-compose up -d
+docker update --restart unless-stopped payambar
 ```
 
 ### 2. CDN Configuration (Cloudflare)
@@ -182,10 +196,15 @@ FILE_STORAGE_PATH   # Directory for uploaded files (default: /data/uploads)
 
 ## Development
 
+### Prerequisites
+- Go 1.25.1 or higher
+- Make
+- SQLite development libraries (for CGO)
+
 ### Build Frontend
 ```bash
 make build-frontend
-# Output: frontend assets → static/
+# Output: frontend assets → cmd/payambar/static/
 ```
 
 ### Build Backend
@@ -198,6 +217,15 @@ make build-backend
 ```bash
 make dev
 # Runs backend with hot-reload for Go
+# Server starts on http://localhost:8080
+```
+
+### Available Make Commands
+```bash
+make dev              # Development mode with go run
+make build-all        # Build for current OS
+make docker-build     # Build Docker image locally
+make clean            # Remove build artifacts
 ```
 
 ### Testing
