@@ -638,7 +638,7 @@ button {
 /* Pull to refresh styles */
 .pull-to-refresh-indicator {
     position: absolute;
-    top: -60px;
+    bottom: -60px;
     left: 0;
     right: 0;
     height: 60px;
@@ -653,6 +653,11 @@ button {
 
 .pull-to-refresh-indicator.visible {
     opacity: 1;
+}
+
+.pull-to-refresh-indicator.ready {
+    opacity: 0.8;
+    transform: translateY(-52px);
 }
 
 .refresh-hint {
@@ -712,7 +717,7 @@ button {
     background: var(--received-bg);
     color: var(--ink);
     border-color: var(--received-border);
-    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
 }
 
 .file-link {
@@ -745,7 +750,7 @@ button {
     gap: 0.5rem;
     align-items: center;
     justify-content: flex-end;
-    margin-top: 0.3rem;
+    margin-top: 0;
 }
 
 .message-time {
@@ -765,6 +770,43 @@ button {
 .message.sent .message-time,
 .message.sent .message-status {
     color: rgba(0, 102, 204, 0.6);
+}
+
+.message-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+
+.message.received .message-footer {
+    justify-content: flex-end;
+}
+
+.message.sent .message-footer {
+    justify-content: flex-start;
+}
+
+.message-menu-btn {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    border-radius: 10px;
+    padding: 0.1rem 0.45rem;
+    cursor: pointer;
+    line-height: 1;
+    font-size: 1.1rem;
+    transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease, border-color 0.15s ease;
+}
+
+.message-menu-btn:hover {
+    background: var(--surface-muted);
+    color: var(--ink);
+    border-color: #d4d4d0;
+}
+
+.message-menu-btn:active {
+    transform: translateY(1px);
 }
 
 .message-input-area {
@@ -1084,7 +1126,7 @@ button {
 
     .input-container input {
         padding: 0.6rem;
-        font-size: 0.9rem;
+        font-size: 1rem;
     }
 
     .input-container button {

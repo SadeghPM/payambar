@@ -1,0 +1,51 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+.coverage
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+bin/
+dist/
+
+# Generated frontend static assets
+cmd/payambar/static/
+
+# Database
+*.db
+*.db-*
+
+# Environment variables
+.env
+.env.local
+
+# Uploads directory
+data/uploads/
+
+# Node modules (if frontend uses npm)
+node_modules/
+package-lock.json
+yarn.lock

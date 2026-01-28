@@ -47,8 +47,6 @@ createApp({
                 y: 0,
                 message: null,
             },
-            touchTimer: null,
-            touchStartPos: null,
             // Offline state
             isOffline: !navigator.onLine,
             serverOffline: false,
@@ -59,6 +57,7 @@ createApp({
                 pulling: false,
                 refreshing: false,
                 threshold: 80,
+                ready: false,
             },
         };
     },
@@ -67,24 +66,9 @@ createApp({
             return !!this.token && !!this.userId && this.userId > 0;
         },
         filteredConversations() {
-            let convs = [...this.conversations];
-            // Sort by last_message_at descending (newest first)
-            convs.sort((a, b) => {
-                let dateA, dateB;
-                try {
-                    dateA = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-                    if (isNaN(dateA)) dateA = 0;
-                } catch (e) {
-                    dateA = 0;
-                }
-                try {
-                    dateB = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
-                    if (isNaN(dateB)) dateB = 0;
-                } catch (e) {
-                    dateB = 0;
-                }
-                return dateB - dateA;
-            });
+            const convs = [...this.conversations];
+            // Sort by latest known message time (newest first)
+            convs.sort((a, b) => this.getConversationLastTimestamp(b) - this.getConversationLastTimestamp(a));
             const q = this.searchQuery.trim().toLowerCase();
             if (!q) return convs;
             return convs.filter((c) => 
@@ -108,10 +92,16 @@ createApp({
         // Listen for online/offline events
         window.addEventListener('online', () => { 
             this.isOffline = false;
-            // Reconnect WebSocket when coming back online
-            if (this.isAuthed && (!this.ws || this.ws.readyState !== WebSocket.OPEN)) {
-                this.wsReconnectAttempts = 0;
-                this.connectWebSocket();
+            this.serverOffline = false;
+            if (this.isAuthed) {
+                this.loadConversations();
+                if (this.currentConversationId) {
+                    this.refreshCurrentConversation();
+                }
+                if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+                    this.wsReconnectAttempts = 0;
+                    this.connectWebSocket();
+                }
             }
         });
         window.addEventListener('offline', () => { this.isOffline = true; });
@@ -212,6 +202,27 @@ createApp({
             if (msg.status === 'read') return '✓✓';
             if (msg.status === 'delivered') return '✓';
             return '';
+        },
+        updatePullReady(container) {
+            const el = container || document.querySelector('.messages-container');
+            if (!el) return;
+            const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+            this.pullToRefresh.ready = distanceFromBottom <= 12;
+        },
+        getConversationLastTimestamp(conv) {
+            if (!conv) return 0;
+            const localMessages = this.messages[conv.user_id] || [];
+            const latestLocal = localMessages.length ? localMessages[localMessages.length - 1]?.created_at : null;
+            const source = latestLocal || conv.last_message_at;
+            if (!source) return 0;
+            const ts = new Date(source).getTime();
+            return isNaN(ts) ? 0 : ts;
+        },
+        updateConversationLastMessage(userId, timestamp) {
+            if (!userId || !timestamp) return;
+            const idx = this.conversations.findIndex(c => c.user_id === userId);
+            if (idx === -1) return;
+            this.conversations[idx].last_message_at = timestamp;
         },
         async handleLogin() {
             this.authError = '';
@@ -399,6 +410,13 @@ createApp({
                 this.messages[conv.user_id] = data.messages || [];
                 // If we got 50 messages, there might be more
                 this.hasMoreMessages[conv.user_id] = (data.messages || []).length >= 50;
+
+                const latestMessage = this.messages[conv.user_id].length
+                    ? this.messages[conv.user_id][this.messages[conv.user_id].length - 1]
+                    : null;
+                if (latestMessage?.created_at) {
+                    this.updateConversationLastMessage(conv.user_id, latestMessage.created_at);
+                }
                 
                 // Mark all unread messages as read via WebSocket
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -437,6 +455,7 @@ createApp({
             };
             if (!this.messages[this.currentConversationId]) this.messages[this.currentConversationId] = [];
             this.messages[this.currentConversationId].push(msg);
+            this.updateConversationLastMessage(this.currentConversationId, msg.created_at);
             this.messageText = '';
             this.chatListOpen = false;
 
@@ -468,6 +487,7 @@ createApp({
                 
                 // Add file message to local messages
                 if (!this.messages[this.currentConversationId]) this.messages[this.currentConversationId] = [];
+                const createdAt = new Date().toISOString();
                 this.messages[this.currentConversationId].push({
                     id: data.message_id,
                     sender_id: this.userId,
@@ -475,8 +495,9 @@ createApp({
                     content: `📎 ${data.file_name}`,
                     file_url: data.file_url,
                     status: 'sent',
-                    created_at: new Date().toISOString(),
+                    created_at: createdAt,
                 });
+                this.updateConversationLastMessage(this.currentConversationId, createdAt);
                 this.$nextTick(() => this.scrollToBottom());
                 this.loadConversations();
             } catch (err) {
@@ -493,6 +514,7 @@ createApp({
                 // Use requestAnimationFrame for smoother scrolling on mobile
                 requestAnimationFrame(() => {
                     container.scrollTop = container.scrollHeight;
+                    this.updatePullReady(container);
                     
                     // On mobile, sometimes need multiple attempts due to rendering delays
                     if (attempts < 3 && container.scrollTop < container.scrollHeight - container.clientHeight - 50) {
@@ -503,6 +525,7 @@ createApp({
         },
         handleMessagesScroll(event) {
             const container = event.target;
+            this.updatePullReady(container);
             // Load more when scrolled near top (within 100px)
             if (container.scrollTop < 100 && !this.loadingOlderMessages && this.hasMoreMessages[this.currentConversationId]) {
                 this.loadOlderMessages();
@@ -553,8 +576,11 @@ createApp({
         handlePullStart(event) {
             if (!this.currentConversationId || this.pullToRefresh.refreshing) return;
             const container = document.querySelector('.messages-container');
-            // Only enable pull-to-refresh when at top of messages
-            if (container && container.scrollTop > 10) return;
+            if (!container) return;
+            const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+            // Only enable pull-to-refresh when at end of messages
+            if (distanceFromBottom > 10) return;
+            this.pullToRefresh.ready = true;
             
             const touch = event.touches ? event.touches[0] : event;
             this.pullToRefresh.startY = touch.clientY;
@@ -566,13 +592,16 @@ createApp({
             const touch = event.touches ? event.touches[0] : event;
             const deltaY = touch.clientY - this.pullToRefresh.startY;
             
-            // Only pull down
-            if (deltaY > 0) {
-                this.pullToRefresh.currentY = Math.min(deltaY, this.pullToRefresh.threshold * 1.5);
-                // Prevent default scroll when pulling down at top
-                if (deltaY > 10) {
+            // Only pull up when at bottom
+            if (deltaY < 0) {
+                const magnitude = Math.abs(deltaY);
+                this.pullToRefresh.currentY = Math.min(magnitude, this.pullToRefresh.threshold * 1.5);
+                // Prevent default scroll when pulling up past the end
+                if (magnitude > 10) {
                     event.preventDefault();
                 }
+            } else {
+                this.pullToRefresh.currentY = 0;
             }
         },
         async handlePullEnd() {
@@ -587,6 +616,7 @@ createApp({
             this.pullToRefresh.pulling = false;
             this.pullToRefresh.startY = 0;
             this.pullToRefresh.currentY = 0;
+            this.updatePullReady();
         },
         async refreshCurrentConversation() {
             if (!this.currentConversationId) return;
@@ -600,6 +630,16 @@ createApp({
                 const data = await res.json();
                 this.messages[this.currentConversationId] = data.messages || [];
                 this.hasMoreMessages[this.currentConversationId] = (data.messages || []).length >= 50;
+
+                const latestMessage = this.messages[this.currentConversationId].length
+                    ? this.messages[this.currentConversationId][this.messages[this.currentConversationId].length - 1]
+                    : null;
+                if (latestMessage?.created_at) {
+                    this.updateConversationLastMessage(this.currentConversationId, latestMessage.created_at);
+                }
+
+                this.$nextTick(() => this.scrollToBottom());
+                this.updatePullReady();
                 
                 // Also refresh conversations list
                 this.loadConversations();
@@ -841,80 +881,42 @@ createApp({
         },
         // Context menu methods
         openContextMenu(event, message) {
-            // Only allow deleting own messages
-            if (Number(message.sender_id) !== Number(this.userId)) {
-                return;
-            }
-            
-            const x = event.clientX || event.pageX;
-            const y = event.clientY || event.pageY;
-            
-            // Adjust position for RTL and viewport bounds
-            const menuWidth = 150;
-            const menuHeight = 50;
+            if (Number(message.sender_id) !== Number(this.userId)) return;
+
+            const targetRect = event?.currentTarget?.getBoundingClientRect
+                ? event.currentTarget.getBoundingClientRect()
+                : null;
+
+            const padding = 12;
+            const menuWidth = 160;
+            const menuHeight = 60;
+
+            let x = targetRect ? targetRect.left : (event.clientX || event.pageX || 0);
+            let y = targetRect ? targetRect.bottom : (event.clientY || event.pageY || 0);
+
             const viewportWidth = window.innerWidth;
             const viewportHeight = window.innerHeight;
-            
-            let adjustedX = x;
-            let adjustedY = y;
-            
-            // For RTL, menu opens to the left
-            if (adjustedX < menuWidth) {
-                adjustedX = menuWidth;
+
+            if (x + menuWidth + padding > viewportWidth) {
+                x = viewportWidth - menuWidth - padding;
             }
-            if (adjustedX > viewportWidth) {
-                adjustedX = viewportWidth - 10;
+            if (x < padding) x = padding;
+
+            if (y + menuHeight + padding > viewportHeight) {
+                y = targetRect ? targetRect.top - menuHeight : viewportHeight - menuHeight - padding;
             }
-            if (adjustedY + menuHeight > viewportHeight) {
-                adjustedY = viewportHeight - menuHeight - 10;
-            }
-            
+            if (y < padding) y = padding;
+
             this.contextMenu = {
                 show: true,
-                x: adjustedX,
-                y: adjustedY,
-                message: message,
+                x,
+                y,
+                message,
             };
         },
         closeContextMenu() {
             this.contextMenu.show = false;
             this.contextMenu.message = null;
-        },
-        handleTouchStart(event, message) {
-            // Only allow context menu for own messages
-            if (Number(message.sender_id) !== Number(this.userId)) {
-                return;
-            }
-            
-            const touch = event.touches[0];
-            this.touchStartPos = { x: touch.clientX, y: touch.clientY };
-            
-            this.touchTimer = setTimeout(() => {
-                // Vibrate for haptic feedback if supported
-                if (navigator.vibrate) {
-                    navigator.vibrate(50);
-                }
-                this.openContextMenu({ clientX: touch.clientX, clientY: touch.clientY }, message);
-            }, 500); // 500ms long press
-        },
-        handleTouchEnd() {
-            if (this.touchTimer) {
-                clearTimeout(this.touchTimer);
-                this.touchTimer = null;
-            }
-        },
-        handleTouchMove(event) {
-            if (!this.touchStartPos || !this.touchTimer) return;
-            
-            const touch = event.touches[0];
-            const dx = Math.abs(touch.clientX - this.touchStartPos.x);
-            const dy = Math.abs(touch.clientY - this.touchStartPos.y);
-            
-            // Cancel if moved more than 10px
-            if (dx > 10 || dy > 10) {
-                clearTimeout(this.touchTimer);
-                this.touchTimer = null;
-            }
         },
         async deleteMessage() {
             const message = this.contextMenu.message;

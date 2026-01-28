@@ -84,7 +84,6 @@
                         </div>
                         <div class="conversation-info">
                             <div class="conversation-username">{{ conv.display_name || ('@' + conv.username) }}</div>
-                            <div class="conversation-preview">{{ formatDate(conv.last_message_at) || 'نو' }}</div>
                         </div>
                         <div v-if="conv.unread_count > 0" class="unread-badge">{{ conv.unread_count }}</div>
                     </div>
@@ -121,11 +120,11 @@
                     @touchend="handlePullEnd">
                     <!-- Pull to refresh indicator -->
                     <div class="pull-to-refresh-indicator" 
-                        :class="{ visible: pullToRefresh.pulling || pullToRefresh.refreshing }"
-                        :style="{ transform: `translateY(${pullToRefresh.currentY}px)` }">
+                        :class="{ visible: pullToRefresh.pulling || pullToRefresh.refreshing || pullToRefresh.ready, ready: pullToRefresh.ready }"
+                        :style="(pullToRefresh.pulling || pullToRefresh.refreshing) ? { transform: `translateY(-${pullToRefresh.currentY}px)` } : null">
                         <div v-if="pullToRefresh.refreshing" class="refresh-spinner">↻</div>
                         <div v-else-if="pullToRefresh.currentY >= pullToRefresh.threshold" class="refresh-hint">رها کنید</div>
-                        <div v-else class="refresh-hint">برای بروزرسانی بکشید</div>
+                            <div v-else class="refresh-hint">برای بروزرسانی به بالا بکشید</div>
                     </div>
                     <div v-if="!currentConversationId" class="empty-state">یک مکالمه را انتخاب کنید</div>
                     <div v-else-if="loadingMessages" class="empty-state">در حال بارگذاری...</div>
@@ -133,20 +132,25 @@
                     <div v-else>
                         <div v-if="loadingOlderMessages" class="loading-older">در حال بارگذاری پیام‌های قدیمی‌تر...</div>
                         <div v-if="hasMoreMessages[currentConversationId] && !loadingOlderMessages" class="load-more-hint">برای بارگذاری پیام‌های قدیمی‌تر به بالا اسکرول کنید</div>
-                        <div v-for="msg in messagesForCurrent" :key="msg.id || msg.client_message_id" class="message" :class="Number(msg.sender_id) === Number(userId) ? 'sent' : 'received'" @contextmenu.prevent="openContextMenu($event, msg)" @touchstart="handleTouchStart($event, msg)" @touchend="handleTouchEnd" @touchmove="handleTouchMove">
-                            <div>
-                                <div class="message-bubble">
-                                    <template v-if="msg.file_url">
-                                        <a :href="msg.file_url" target="_blank" class="file-link" download>
-                                            📎 {{ msg.file_name || 'دانلود فایل' }}
-                                        </a>
-                                    </template>
-                                    <template v-else>{{ msg.content }}</template>
-                                </div>
+                        <div v-for="msg in messagesForCurrent" :key="msg.id || msg.client_message_id" class="message" :class="Number(msg.sender_id) === Number(userId) ? 'sent' : 'received'">
+                            <div class="message-bubble">
+                                <template v-if="msg.file_url">
+                                    <a :href="msg.file_url" target="_blank" class="file-link" download>
+                                        📎 {{ msg.file_name || 'دانلود فایل' }}
+                                    </a>
+                                </template>
+                                <template v-else>{{ msg.content }}</template>
+                            </div>
+                            <div class="message-footer">
                                 <div class="message-meta">
                                     <span class="message-time">{{ formatTime(msg.created_at) }}</span>
                                     <span class="message-status">{{ formatStatus(msg) }}</span>
                                 </div>
+                                <button 
+                                    v-if="Number(msg.sender_id) === Number(userId)" 
+                                    class="message-menu-btn" 
+                                    @click.stop="openContextMenu($event, msg)"
+                                    aria-label="گزینه‌های پیام">⋯</button>
                             </div>
                         </div>
                     </div>

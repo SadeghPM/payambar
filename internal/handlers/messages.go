@@ -232,8 +232,6 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 		}
 		if lastMessageAt.Valid {
 			conv.LastMessageAt = lastMessageAt.Time
-		} else {
-			conv.LastMessageAt = cd.createdAt
 		}
 
 		conversations = append(conversations, conv)
@@ -519,7 +517,7 @@ func (h *MessageHandler) CreateConversation(c *gin.Context) {
 	currentUID := userID.(int)
 	pattern1 := strconv.Itoa(currentUID) + "," + strconv.Itoa(req.ParticipantID)
 	pattern2 := strconv.Itoa(req.ParticipantID) + "," + strconv.Itoa(currentUID)
-	
+
 	var existingID int
 	err = h.db.QueryRow(`
 		SELECT id FROM conversations 
