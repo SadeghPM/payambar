@@ -1,4 +1,4 @@
-name: Build Linux Binary
+name: Build Binaries
 
 on:
   push:
@@ -8,9 +8,32 @@ on:
 
 jobs:
   build:
-    name: Build Binary
-    runs-on: ubuntu-latest
-    
+    name: Build ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            output_name: payambar-linux-amd64
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y libsqlite3-dev
+            build_cmd: |
+              CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-linux-amd64 ./cmd/payambar
+          
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            output_name: payambar-darwin-arm64
+            install_deps: |
+              # macOS runner usually has what's needed, but ensuring deps
+              brew install make || true
+            build_cmd: |
+              mkdir -p bin
+              CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-darwin-arm64 ./cmd/payambar
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -22,21 +45,17 @@ jobs:
         check-latest: true
 
     - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libsqlite3-dev
+      run: ${{ matrix.install_deps }}
 
     - name: Build Frontend Assets
       run: make build-frontend
 
-    - name: Build Linux Binary
-      run: |
-        mkdir -p bin
-        CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-linux-amd64 ./cmd/payambar
+    - name: Build Binary
+      run: ${{ matrix.build_cmd }}
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: payambar-linux-amd64
-        path: bin/payambar-linux-amd64
+        name: ${{ matrix.output_name }}
+        path: bin/${{ matrix.output_name }}
         if-no-files-found: error
