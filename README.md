@@ -242,7 +242,7 @@ ws.send(JSON.stringify({type: 'message', receiver_id: 2, content: 'Hello'}));
 
 ### Current Constraints
 - Single VPS backend (no horizontal scaling)
-- SQLite database (single writer, concurrent readers)
+- SQLite database with WAL mode (concurrent writes and reads)
 - In-memory WebSocket hub (connections lost on restart)
 
 ### To Scale in Future

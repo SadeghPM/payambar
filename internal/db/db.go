@@ -23,7 +23,32 @@ func New(path string) (*DB, error) {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	// Enable WAL mode for concurrent writes and reads
+	// WAL mode allows readers to work while a writer is writing
+	if _, err := conn.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
+	// Set busy timeout to 5 seconds (waits instead of immediate SQLITE_BUSY error)
+	// This helps with concurrent write attempts
+	if _, err := conn.Exec("PRAGMA busy_timeout=5000"); err != nil {
+		return nil, fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+
+	// Use NORMAL synchronous mode (faster than FULL, still safe with WAL)
+	// FULL=safest but slower, NORMAL=good balance, OFF=fastest but risky
+	if _, err := conn.Exec("PRAGMA synchronous=NORMAL"); err != nil {
+		return nil, fmt.Errorf("failed to set synchronous mode: %w", err)
+	}
+
+	// Optional: Set cache size for better performance (negative = KB, positive = pages)
+	// -64000 = 64MB cache
+	if _, err := conn.Exec("PRAGMA cache_size=-64000"); err != nil {
+		return nil, fmt.Errorf("failed to set cache size: %w", err)
+	}
+
 	// Configure connection pool
+	// With WAL mode, you can have more concurrent connections
 	conn.SetMaxOpenConns(25)
 	conn.SetMaxIdleConns(5)
 	conn.SetConnMaxLifetime(5 * time.Minute)
