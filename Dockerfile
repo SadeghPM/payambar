@@ -5,7 +5,7 @@ WORKDIR /app
 COPY . .
 
 # Build frontend to cmd/payambar/static
-RUN apk add --no-cache make && make build-frontend
+RUN apk add --no-cache make build-base sqlite-dev && make build-frontend
 
 # Build backend with embedded frontend
 RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o bin/payambar ./cmd/payambar
