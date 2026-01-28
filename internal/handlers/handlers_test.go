@@ -38,6 +38,8 @@ func TestMain(m *testing.M) {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			username TEXT UNIQUE NOT NULL,
 			password_hash TEXT NOT NULL,
+			display_name TEXT,
+			avatar_url TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 		);
@@ -60,6 +62,17 @@ func TestMain(m *testing.M) {
 			read_at TIMESTAMP,
 			FOREIGN KEY (sender_id) REFERENCES users(id),
 			FOREIGN KEY (receiver_id) REFERENCES users(id)
+		);
+
+		CREATE TABLE IF NOT EXISTS files (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			message_id INTEGER NOT NULL,
+			file_name TEXT NOT NULL,
+			file_path TEXT NOT NULL,
+			file_size INTEGER NOT NULL,
+			content_type TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (message_id) REFERENCES messages(id)
 		);
 	`)
 	if err != nil {
@@ -102,6 +115,7 @@ func setupTestRouter() *gin.Engine {
 }
 
 func clearTestData() {
+	testDB.Exec("DELETE FROM files")
 	testDB.Exec("DELETE FROM messages")
 	testDB.Exec("DELETE FROM conversations")
 	testDB.Exec("DELETE FROM users")

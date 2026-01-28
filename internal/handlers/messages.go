@@ -4,7 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"os"
-	"sort"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +36,19 @@ func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker) *MessageHandler 
 		broadcaster = b
 	}
 	return &MessageHandler{db: db, onlineChecker: onlineChecker, broadcaster: broadcaster}
+}
+
+// ConversationPreview represents a conversation in the list view
+type ConversationPreview struct {
+	ID            int       `json:"id"`
+	UserID        int       `json:"user_id"`
+	Username      string    `json:"username"`
+	DisplayName   *string   `json:"display_name,omitempty"`
+	AvatarURL     *string   `json:"avatar_url,omitempty"`
+	IsOnline      bool      `json:"is_online"`
+	LastMessageAt time.Time `json:"last_message_at"`
+	UnreadCount   int       `json:"unread_count"`
+	Participants  []int     `json:"participants"`
 }
 
 // GetConversation retrieves message history between two users
@@ -70,12 +83,14 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 
 	currentUserID := userID.(int)
 
-	// Get messages between the two users
+	// Get messages between the two users with file attachments in single query (fixes N+1)
 	rows, err := h.db.Query(`
-		SELECT id, sender_id, receiver_id, content, status, created_at, delivered_at, read_at
-		FROM messages
-		WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
-		ORDER BY created_at DESC
+		SELECT m.id, m.sender_id, m.receiver_id, m.content, m.status, m.created_at, m.delivered_at, m.read_at,
+		       f.file_name, f.file_path
+		FROM messages m
+		LEFT JOIN files f ON f.message_id = m.id
+		WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)
+		ORDER BY m.created_at DESC
 		LIMIT ? OFFSET ?
 	`, currentUserID, otherUserID, otherUserID, currentUserID, limit, offset)
 
@@ -88,13 +103,12 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 	var messages []*models.Message
 	for rows.Next() {
 		msg := &models.Message{}
-		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Content, &msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.ReadAt); err != nil {
+		var fileName, filePath sql.NullString
+		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Content, &msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.ReadAt, &fileName, &filePath); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to scan message"})
 			return
 		}
-		// Check if this message has a file attachment
-		var fileName, filePath sql.NullString
-		h.db.QueryRow(`SELECT file_name, file_path FROM files WHERE message_id = ?`, msg.ID).Scan(&fileName, &filePath)
+		// Set file attachment if present
 		if fileName.Valid {
 			msg.FileName = &fileName.String
 			fileURL := "/api/files/" + strings.TrimPrefix(filePath.String, "./data/uploads/")
@@ -122,23 +136,15 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 
 	currentUserID := userID.(int)
 
-	type ConversationPreview struct {
-		ID            int       `json:"id"`
-		UserID        int       `json:"user_id"`
-		Username      string    `json:"username"`
-		DisplayName   *string   `json:"display_name,omitempty"`
-		AvatarURL     *string   `json:"avatar_url,omitempty"`
-		IsOnline      bool      `json:"is_online"`
-		LastMessageAt time.Time `json:"last_message_at"`
-		UnreadCount   int       `json:"unread_count"`
-		Participants  []int     `json:"participants"`
-	}
-
 	var conversations []*ConversationPreview
 
-	// Get all conversations and filter in Go for correct participant matching
-	// Then batch fetch user info and message stats
-	rows, err := h.db.Query(`SELECT id, participants, created_at FROM conversations`)
+	// Optimized approach: Fetch conversations for this user, then batch-load related data
+	// Step 1: Get user's conversations in one query
+	rows, err := h.db.Query(`
+		SELECT id, participants FROM conversations 
+		WHERE participants LIKE ? OR participants LIKE ?
+	`, strconv.Itoa(currentUserID)+",%", "%,"+strconv.Itoa(currentUserID))
+
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch conversations"})
 		return
@@ -147,59 +153,93 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 	type convData struct {
 		id           int
 		participants string
-		createdAt    time.Time
 		otherUserID  int
 	}
 	var userConvs []convData
+	var otherUserIDs []int
 
 	for rows.Next() {
 		var cd convData
-		if err := rows.Scan(&cd.id, &cd.participants, &cd.createdAt); err != nil {
+		if err := rows.Scan(&cd.id, &cd.participants); err != nil {
 			continue
 		}
 
-		// Parse participants and check if current user is involved
+		// Parse participants to find the other user
 		parts := strings.Split(cd.participants, ",")
-		isParticipant := false
 		for _, p := range parts {
 			pid, err := strconv.Atoi(strings.TrimSpace(p))
 			if err != nil {
 				continue
 			}
-			if pid == currentUserID {
-				isParticipant = true
-			} else {
+			if pid != currentUserID {
 				cd.otherUserID = pid
+				break
 			}
 		}
 
-		if isParticipant && cd.otherUserID > 0 {
+		if cd.otherUserID > 0 {
 			userConvs = append(userConvs, cd)
+			otherUserIDs = append(otherUserIDs, cd.otherUserID)
 		}
 	}
 	rows.Close()
 
-	// Now batch fetch all needed data for filtered conversations
-	for _, cd := range userConvs {
-		var username string
-		var displayName, avatarURL sql.NullString
-		var lastMessageAt sql.NullTime
-		var unreadCount int
+	if len(userConvs) == 0 {
+		c.JSON(http.StatusOK, gin.H{"conversations": []*ConversationPreview{}})
+		return
+	}
 
-		// Get user info
-		err := h.db.QueryRow("SELECT username, display_name, avatar_url FROM users WHERE id = ?", cd.otherUserID).
-			Scan(&username, &displayName, &avatarURL)
-		if err != nil {
+	// Step 2: Batch fetch user info for all other users
+	userInfoMap := make(map[int]struct {
+		username    string
+		displayName sql.NullString
+		avatarURL   sql.NullString
+	})
+
+	// Build placeholders for IN clause
+	placeholders := strings.Repeat("?,", len(otherUserIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+
+	args := make([]interface{}, len(otherUserIDs))
+	for i, id := range otherUserIDs {
+		args[i] = id
+	}
+
+	userRows, err := h.db.Query(
+		`SELECT id, username, display_name, avatar_url FROM users WHERE id IN (`+placeholders+`)`,
+		args...,
+	)
+	if err == nil {
+		for userRows.Next() {
+			var id int
+			var info struct {
+				username    string
+				displayName sql.NullString
+				avatarURL   sql.NullString
+			}
+			if err := userRows.Scan(&id, &info.username, &info.displayName, &info.avatarURL); err == nil {
+				userInfoMap[id] = info
+			}
+		}
+		userRows.Close()
+	}
+
+	// Step 3: Build conversations with the fetched data
+	// For last_message_at and unread_count, we still need individual queries but only for filtered convs
+	for _, cd := range userConvs {
+		userInfo, ok := userInfoMap[cd.otherUserID]
+		if !ok {
 			continue
 		}
 
-		// Get last message time
+		var lastMessageAt sql.NullTime
+		var unreadCount int
+
 		h.db.QueryRow(`
 			SELECT MAX(created_at) FROM messages
 			WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
 		`, currentUserID, cd.otherUserID, cd.otherUserID, currentUserID).Scan(&lastMessageAt)
 
-		// Get unread count
 		h.db.QueryRow(`
 			SELECT COUNT(*) FROM messages
 			WHERE receiver_id = ? AND sender_id = ? AND read_at IS NULL
@@ -207,28 +247,28 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 
 		// Parse participants for response
 		parts := strings.Split(cd.participants, ",")
-		var participants []int
+		var participantIDs []int
 		for _, p := range parts {
 			pid, _ := strconv.Atoi(strings.TrimSpace(p))
 			if pid > 0 {
-				participants = append(participants, pid)
+				participantIDs = append(participantIDs, pid)
 			}
 		}
 
 		conv := &ConversationPreview{
 			ID:           cd.id,
 			UserID:       cd.otherUserID,
-			Username:     username,
+			Username:     userInfo.username,
 			IsOnline:     h.onlineChecker != nil && h.onlineChecker.IsUserOnline(cd.otherUserID),
 			UnreadCount:  unreadCount,
-			Participants: participants,
+			Participants: participantIDs,
 		}
 
-		if displayName.Valid {
-			conv.DisplayName = &displayName.String
+		if userInfo.displayName.Valid {
+			conv.DisplayName = &userInfo.displayName.String
 		}
-		if avatarURL.Valid {
-			conv.AvatarURL = &avatarURL.String
+		if userInfo.avatarURL.Valid {
+			conv.AvatarURL = &userInfo.avatarURL.String
 		}
 		if lastMessageAt.Valid {
 			conv.LastMessageAt = lastMessageAt.Time
@@ -242,9 +282,13 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 	}
 
 	// Sort by last_message_at descending
-	sort.Slice(conversations, func(i, j int) bool {
-		return conversations[i].LastMessageAt.After(conversations[j].LastMessageAt)
-	})
+	for i := 0; i < len(conversations)-1; i++ {
+		for j := i + 1; j < len(conversations); j++ {
+			if conversations[j].LastMessageAt.After(conversations[i].LastMessageAt) {
+				conversations[i], conversations[j] = conversations[j], conversations[i]
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{"conversations": conversations})
 }
@@ -603,12 +647,14 @@ func (h *MessageHandler) UploadFile(c *gin.Context) {
 
 	messageID, _ := result.LastInsertId()
 
-	// Generate unique filename
-	filename := strconv.FormatInt(time.Now().UnixNano(), 10) + "_" + header.Filename
-	filepath := "./data/uploads/" + filename
+	// Generate unique filename with path traversal protection
+	// filepath.Base() strips any directory components from the filename
+	safeFilename := filepath.Base(header.Filename)
+	filename := strconv.FormatInt(time.Now().UnixNano(), 10) + "_" + safeFilename
+	uploadPath := "./data/uploads/" + filename
 
 	// Save file
-	if err := c.SaveUploadedFile(header, filepath); err != nil {
+	if err := c.SaveUploadedFile(header, uploadPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
 		return
 	}
@@ -617,7 +663,7 @@ func (h *MessageHandler) UploadFile(c *gin.Context) {
 	_, err = h.db.Exec(`
 		INSERT INTO files (message_id, file_name, file_path, file_size, content_type, created_at)
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-	`, messageID, header.Filename, filepath, header.Size, header.Header.Get("Content-Type"))
+	`, messageID, safeFilename, uploadPath, header.Size, header.Header.Get("Content-Type"))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file record"})
 		return
@@ -703,17 +749,18 @@ func (h *MessageHandler) UploadAvatar(c *gin.Context) {
 		return
 	}
 
-	// Generate unique filename
+	// Generate unique filename with path traversal protection
+	safeFilename := filepath.Base(header.Filename)
 	ext := ".jpg"
-	if strings.Contains(header.Filename, ".") {
-		parts := strings.Split(header.Filename, ".")
+	if strings.Contains(safeFilename, ".") {
+		parts := strings.Split(safeFilename, ".")
 		ext = "." + parts[len(parts)-1]
 	}
 	filename := "avatar_" + strconv.Itoa(userID.(int)) + "_" + strconv.FormatInt(time.Now().UnixNano(), 10) + ext
-	filepath := "./data/uploads/" + filename
+	uploadPath := "./data/uploads/" + filename
 
 	// Save file
-	if err := c.SaveUploadedFile(header, filepath); err != nil {
+	if err := c.SaveUploadedFile(header, uploadPath); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save avatar"})
 		return
 	}
