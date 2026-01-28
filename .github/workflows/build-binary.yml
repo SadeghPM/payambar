@@ -47,11 +47,11 @@ jobs:
     - name: Install dependencies
       run: ${{ matrix.install_deps }}
 
-    - name: Run Tests
-      run: make test
-
     - name: Build Frontend Assets
       run: make build-frontend
+
+    - name: Run Tests
+      run: make test
 
     - name: Build Binary
       run: ${{ matrix.build_cmd }}
