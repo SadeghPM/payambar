@@ -1,4 +1,4 @@
-.PHONY: build build-frontend build-backend build-all clean run dev docker-build docker-run
+.PHONY: build build-frontend build-backend build-all clean run dev docker-build docker-run test fmt
 
 # Build frontend to cmd/payambar/static/
 build-frontend:
@@ -60,3 +60,16 @@ docker-run:
 		-e JWT_SECRET=your-secret-key \
 		-v payambar_data:/data \
 		payambar:latest
+
+# Run all tests
+test:
+	@echo "Running tests..."
+	go test -v -race -coverprofile=coverage.out ./...
+	@echo "Coverage report:"
+	go tool cover -func=coverage.out
+
+
+# Format code
+fmt:
+	@echo "Formatting code..."
+	gofmt -w -s .

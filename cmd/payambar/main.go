@@ -95,7 +95,7 @@ func main() {
 		protected.PUT("/messages/:id/read", msgHandler.MarkAsRead)
 		protected.DELETE("/messages/:id", msgHandler.DeleteMessage)
 		protected.POST("/upload", msgHandler.UploadFile)
-		
+
 		// Profile
 		protected.GET("/profile", msgHandler.GetMyProfile)
 		protected.PUT("/profile", msgHandler.UpdateProfile)

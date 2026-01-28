@@ -225,6 +225,8 @@ make dev
 make dev              # Development mode with go run
 make build-all        # Build for current OS
 make docker-build     # Build Docker image locally
+make test             # Run all tests with coverage
+make fmt              # Format code with gofmt
 make clean            # Remove build artifacts
 ```
 

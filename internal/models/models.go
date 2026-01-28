@@ -11,16 +11,16 @@ type User struct {
 }
 
 type Message struct {
-	ID          int       `json:"id"`
-	SenderID    int       `json:"sender_id"`
-	ReceiverID  int       `json:"receiver_id"`
-	Content     string    `json:"content"`
-	Status      string    `json:"status"` // sent, delivered, read
-	CreatedAt   time.Time `json:"created_at"`
+	ID          int        `json:"id"`
+	SenderID    int        `json:"sender_id"`
+	ReceiverID  int        `json:"receiver_id"`
+	Content     string     `json:"content"`
+	Status      string     `json:"status"` // sent, delivered, read
+	CreatedAt   time.Time  `json:"created_at"`
 	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
 	ReadAt      *time.Time `json:"read_at,omitempty"`
-	FileName    *string   `json:"file_name,omitempty"`
-	FileURL     *string   `json:"file_url,omitempty"`
+	FileName    *string    `json:"file_name,omitempty"`
+	FileURL     *string    `json:"file_url,omitempty"`
 }
 
 type File struct {

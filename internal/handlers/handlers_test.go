@@ -297,7 +297,7 @@ func TestConversations(t *testing.T) {
 		// Ensure conversation exists (in case subtests run in isolation)
 		testDB.Exec("INSERT OR IGNORE INTO conversations (participants) VALUES (?)",
 			strconv.Itoa(user1ID)+","+strconv.Itoa(user2ID))
-		
+
 		req := httptest.NewRequest("GET", "/api/conversations", nil)
 		req.Header.Set("Authorization", "Bearer "+token1)
 		w := httptest.NewRecorder()

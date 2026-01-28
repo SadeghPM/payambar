@@ -74,7 +74,17 @@ Edit frontend files in `frontend/`:
 
 Frontend is embedded at build time, no separate dev server (unless using Vite/bundler).
 
-### 3. Building for Production
+### 3. Testing and Code Quality
+
+```bash
+# Run all tests with coverage
+make test
+
+# Format code
+make fmt
+```
+
+### 4. Building for Production
 
 ```bash
 # Build everything (frontend → static/ → embedded in binary)
@@ -84,7 +94,7 @@ make build-all
 # This is the final deployment artifact
 ```
 
-### 4. Docker Deployment
+### 5. Docker Deployment
 
 ```bash
 # Build image

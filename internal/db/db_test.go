@@ -63,7 +63,7 @@ func TestWALMode(t *testing.T) {
 func TestWALModeWithFile(t *testing.T) {
 	// Create temporary file database to test WAL
 	tmpDB := t.TempDir() + "/test.db"
-	
+
 	db, err := New(tmpDB)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)

@@ -93,19 +93,19 @@ func (h *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 		// Try to get token from Authorization header first
 		authHeader := c.GetHeader("Authorization")
 		token := ""
-		
+
 		if authHeader != "" {
 			// Extract token from "Bearer <token>"
 			if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
 				token = authHeader[7:]
 			}
 		}
-		
+
 		// If not in header, try query parameter (for WebSocket)
 		if token == "" {
 			token = c.Query("token")
 		}
-		
+
 		if token == "" {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization token"})
 			c.Abort()
