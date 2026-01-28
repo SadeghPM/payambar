@@ -2,9 +2,10 @@ version: '3.8'
 
 services:
   payambar:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/sadeghpm/payambar:latest
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     container_name: payambar
     ports:
       - "8080:8080"

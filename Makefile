@@ -1,4 +1,4 @@
-.PHONY: build build-frontend build-backend build-linux build-all build-all-platforms clean run dev docker-build docker-run
+.PHONY: build build-frontend build-backend build-all clean run dev docker-build docker-run
 
 # Build frontend to cmd/payambar/static/
 build-frontend:
@@ -29,23 +29,11 @@ build-backend: build-frontend
 	mkdir -p bin
 	go build -o bin/payambar ./cmd/payambar
 
-# Build backend for Linux (for server deployment) using Docker to enable cgo/SQLite
-build-linux: build-frontend
-	@echo "Building backend for Linux (cgo + SQLite)..."
-	mkdir -p bin
-	docker run --rm --platform=linux/amd64 -v "$$PWD":/app -w /app golang:1.25-bookworm bash -lc "\
-		apt-get update >/dev/null && \
-		apt-get install -y build-essential sqlite3 libsqlite3-dev >/dev/null && \
-		PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -o bin/payambar-linux ./cmd/payambar"
-	@echo "Linux binary: bin/payambar-linux"
 
 # Build all (current OS only)
 build-all: build-backend
 	@echo "Build complete: bin/payambar"
 
-# Build for all platforms
-build-all-platforms: build-backend build-linux
-	@echo "Build complete: bin/payambar (current OS) and bin/payambar-linux"
 
 # Run locally
 run: build-backend
