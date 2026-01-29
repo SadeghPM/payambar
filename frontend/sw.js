@@ -1,5 +1,5 @@
 // Service Worker for offline support and caching
-const CACHE_NAME = 'payambar-v7';
+const CACHE_NAME = 'payambar-v8';
 const urlsToCache = [
   '/',
   '/index.html',
