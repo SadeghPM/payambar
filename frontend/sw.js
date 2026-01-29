@@ -5,6 +5,7 @@ const urlsToCache = [
   '/index.html',
   '/styles.css',
   '/app.js',
+  '/vue.global.prod.js',
   '/manifest.json',
   '/fonts/vazirmatn-arabic.woff2',
   '/fonts/vazirmatn-latin.woff2',
