@@ -8,11 +8,13 @@ A minimal 1-to-1 messaging system built with Go 1.25+ (backend), WebSocket (real
 - ✅ Real-time 1-to-1 messaging via WebSocket
 - ✅ Message status tracking (sent, delivered, read)
 - ✅ Public shareable user profiles (`/u/{username}`)
+- ✅ Account deletion and conversation cleanup
 - ✅ Progressive Web App (PWA) - installable on desktop & mobile
 - ✅ RTL layout & Persian (Farsi) language support
 - ✅ SQLite database (zero setup)
 - ✅ Single Go binary with embedded frontend assets
 - ✅ Served behind CDN with SSL termination
+- ✅ Auth rate limiting on login/register
 
 ## Architecture
 
@@ -26,6 +28,7 @@ A minimal 1-to-1 messaging system built with Go 1.25+ (backend), WebSocket (real
 ### Frontend (Vanilla JS PWA)
 - **Layout**: Two-panel (chat list, message view)
 - **Real-time**: WebSocket client with auto-reconnect
+- **Performance**: Optimized conversation list loading
 - **Offline**: Service worker with cache-first strategy
 - **Responsive**: Mobile-first design (RTL aware)
 - **Persian**: Full RTL + Farsi language support
@@ -106,9 +109,14 @@ payambar/
 
 ### Messages (Protected)
 - `GET /api/conversations` - Get all conversations
+- `DELETE /api/conversations/{id}` - Delete a conversation
 - `GET /api/messages?user_id={id}` - Get conversation history
 - `PUT /api/messages/{id}/delivered` - Mark as delivered
 - `PUT /api/messages/{id}/read` - Mark as read
+- `DELETE /api/messages/{id}` - Delete a message
+
+### Profile (Protected)
+- `DELETE /api/profile` - Delete account and related data
 
 ### WebSocket (Protected)
 - `GET /ws` - WebSocket connection for real-time messaging
@@ -260,7 +268,7 @@ ws.send(JSON.stringify({type: 'message', receiver_id: 2, content: 'Hello'}));
 - ✅ Password hashing with bcrypt
 - ✅ CORS headers configured
 - ✅ WebSocket origin validation
-- ⚠️ Rate limiting (not implemented - add middleware if needed)
+- ✅ Rate limiting on auth endpoints
 - ⚠️ Input sanitization (basic XSS prevention in frontend)
 
 ## Troubleshooting
