@@ -502,3 +502,69 @@ func TestMessageEventJSON(t *testing.T) {
 		t.Errorf("Expected content 'Hello', got '%s'", decoded.Content)
 	}
 }
+
+func TestSignalingForwarding(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	hub := NewHub(db)
+	go hub.Run()
+
+	time.Sleep(10 * time.Millisecond)
+
+	// Register two clients
+	client1 := &Client{
+		userID: 1,
+		hub:    hub,
+		send:   make(chan interface{}, 256),
+	}
+	client2 := &Client{
+		userID: 2,
+		hub:    hub,
+		send:   make(chan interface{}, 256),
+	}
+
+	hub.register <- client1
+	hub.register <- client2
+
+	time.Sleep(10 * time.Millisecond)
+
+	// Simulate a call_offer from user 1 to user 2
+	offerEvent := map[string]interface{}{
+		"type":        "call_offer",
+		"receiver_id": float64(2),
+		"payload": map[string]interface{}{
+			"offer": "test-sdp-offer",
+		},
+	}
+
+	client1.handleSignalingEvent(offerEvent)
+
+	// Wait for delivery
+	time.Sleep(50 * time.Millisecond)
+
+	// Check if client2 received the offer
+	select {
+	case received := <-client2.send:
+		receivedMsg, ok := received.(*MessageEvent)
+		if !ok {
+			t.Fatal("Received wrong type")
+		}
+		if receivedMsg.Type != "call_offer" {
+			t.Errorf("Expected type 'call_offer', got '%s'", receivedMsg.Type)
+		}
+		if receivedMsg.Payload["offer"] != "test-sdp-offer" {
+			t.Errorf("Expected offer 'test-sdp-offer', got '%v'", receivedMsg.Payload["offer"])
+		}
+	default:
+		t.Error("Client2 did not receive the call_offer")
+	}
+
+	// Check that client1 did NOT receive the offer (signaling should be one-way)
+	select {
+	case <-client1.send:
+		t.Error("Sender received their own signaling message")
+	default:
+		// Correct
+	}
+}

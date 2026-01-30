@@ -129,7 +129,20 @@
                         </template>
                     </div>
                     <div class="header-actions">
+                        <button class="icon-btn ghost call-btn" v-if="currentConversationId" @click="startCall" aria-label="تماس صوتی">📞</button>
                         <!-- <button class="icon-btn ghost" v-show="currentConversationId" @click="shareProfile" aria-label="اشتراک پروفایل">↗</button> -->
+                    </div>
+                </div>
+
+                <!-- Active Call Bar -->
+                <div v-if="activeCall" class="active-call-bar">
+                    <div class="active-call-info">
+                        <span class="pulse-icon">●</span>
+                        <span>در حال مکالمه با {{ activeCall.displayName || activeCall.username }}</span>
+                        <span v-if="callDuration">{{ callDuration }}</span>
+                    </div>
+                    <div class="active-call-actions">
+                        <button class="btn-hangup" @click="endCall">قطع تماس</button>
                     </div>
                 </div>
 
@@ -236,6 +249,48 @@
                             </details>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Incoming Call Modal -->
+        <div v-if="incomingCall" class="modal">
+            <div class="modal-content incoming-call-modal">
+                <div class="call-avatar">
+                    <img v-if="incomingCall.avatar_url" :src="incomingCall.avatar_url" class="avatar-img">
+                    <span v-else>{{ incomingCall.username.charAt(0).toUpperCase() }}</span>
+                </div>
+                <div class="call-info">
+                    <h3>{{ incomingCall.displayName || incomingCall.username }}</h3>
+                    <p>تماس صوتی ورودی...</p>
+                </div>
+                <div class="call-actions">
+                    <button class="btn-accept" @click="acceptCall">
+                        <span>📞</span> پذیرفتن
+                    </button>
+                    <button class="btn-decline" @click="rejectCall">
+                        <span>✖</span> رد کردن
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Calling Modal (Outgoing) -->
+        <div v-if="outgoingCall" class="modal">
+            <div class="modal-content incoming-call-modal">
+                <div class="call-avatar">
+                    <img v-if="outgoingCall.avatarUrl" :src="outgoingCall.avatarUrl" class="avatar-img">
+                    <span v-else>{{ outgoingCall.username.charAt(0).toUpperCase() }}</span>
+                </div>
+                <div class="call-info">
+                    <h3>{{ outgoingCall.displayName || outgoingCall.username }}</h3>
+                    <p v-if="outgoingCall.status === 'ringing'">در حال زنگ خوردن...</p>
+                    <p v-else>در حال برقراری تماس...</p>
+                </div>
+                <div class="call-actions">
+                    <button class="btn-decline" @click="endCall">
+                        <span>✖</span> لغو
+                    </button>
                 </div>
             </div>
         </div>
