@@ -19,6 +19,7 @@ var (
 	testDB      *sql.DB
 	testAuthSvc *auth.Service
 	testRouter  *gin.Engine
+	testUploadDir string
 )
 
 func TestMain(m *testing.M) {
@@ -79,11 +80,17 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 
+	testUploadDir, err = os.MkdirTemp("", "payambar-test-uploads")
+	if err != nil {
+		panic(err)
+	}
+
 	testAuthSvc = auth.New(testDB, "test-jwt-secret")
 	testRouter = setupTestRouter()
 
 	code := m.Run()
 
+	os.RemoveAll(testUploadDir)
 	testDB.Close()
 	os.Exit(code)
 }
@@ -92,7 +99,7 @@ func setupTestRouter() *gin.Engine {
 	router := gin.New()
 
 	authHandler := NewAuthHandler(testAuthSvc)
-	msgHandler := NewMessageHandler(testDB, nil)
+	msgHandler := NewMessageHandler(testDB, nil, testUploadDir)
 
 	api := router.Group("/api")
 	{
