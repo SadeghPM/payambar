@@ -93,9 +93,21 @@
                         <div class="conversation-info">
                             <div class="conversation-username">{{ conv.display_name || ('@' + conv.username) }}</div>
                         </div>
-                        <div v-if="conv.unread_count > 0" class="unread-badge">{{ conv.unread_count }}</div>
+                        <div class="conversation-actions">
+                            <div v-if="conv.unread_count > 0" class="unread-badge">{{ conv.unread_count }}</div>
+                            <button class="conversation-menu-btn" @click.stop="openConversationMenu($event, conv)" aria-label="گزینه‌های مکالمه">⋯</button>
+                        </div>
                     </div>
                 </div>
+
+                <!-- Conversation Menu -->
+                <div v-if="conversationMenu.show" class="context-menu" :style="{top: conversationMenu.y + 'px', left: conversationMenu.x + 'px'}" @click.stop>
+                    <button class="context-menu-item delete" @click="deleteConversation(conversationMenu.conversation)">
+                        <span class="context-menu-icon">🗑️</span>
+                        <span>حذف مکالمه</span>
+                    </button>
+                </div>
+                <div v-if="conversationMenu.show" class="context-menu-overlay" @click="closeConversationMenu"></div>
             </div>
 
             <!-- Chat Panel -->
@@ -214,6 +226,14 @@
                                 <button class="btn-secondary" @click="showProfileModal = false">بستن</button>
                                 <button class="btn-primary" @click="saveProfile">ذخیره</button>
                             </div>
+                            <details class="profile-danger-zone">
+                                <summary class="danger-summary">حذف حساب کاربری</summary>
+                                <div class="danger-text">برای حذف حساب، نام کاربری خود را وارد کنید. این عملیات غیرقابل بازگشت است.</div>
+                                <input type="text" v-model="deleteAccountConfirm" placeholder="نام کاربری" class="danger-input">
+                                <button class="btn-danger" @click="deleteAccount" :disabled="deletingAccount || deleteAccountConfirm.trim() !== username">
+                                    {{ deletingAccount ? 'در حال حذف...' : 'حذف حساب' }}
+                                </button>
+                            </details>
                         </div>
                     </div>
                 </div>

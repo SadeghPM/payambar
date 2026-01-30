@@ -119,6 +119,18 @@ func (h *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
+		exists, err := h.authSvc.UserExists(claims.UserID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate user"})
+			c.Abort()
+			return
+		}
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+			c.Abort()
+			return
+		}
+
 		c.Set("user_id", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Next()

@@ -73,7 +73,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authSvc)
-	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub)
+	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub, cfg.FileStoragePath)
 
 	// Setup router
 	if cfg.Environment == "production" {
@@ -120,6 +120,7 @@ func main() {
 		protected.GET("/conversations", msgHandler.GetConversations)
 		protected.GET("/users", msgHandler.GetUsers)
 		protected.POST("/conversations", msgHandler.CreateConversation)
+		protected.DELETE("/conversations/:id", msgHandler.DeleteConversation)
 		protected.PUT("/messages/:id/delivered", msgHandler.MarkAsDelivered)
 		protected.PUT("/messages/:id/read", msgHandler.MarkAsRead)
 		protected.DELETE("/messages/:id", msgHandler.DeleteMessage)
@@ -129,6 +130,7 @@ func main() {
 		protected.GET("/profile", msgHandler.GetMyProfile)
 		protected.PUT("/profile", msgHandler.UpdateProfile)
 		protected.POST("/profile/avatar", msgHandler.UploadAvatar)
+		protected.DELETE("/profile", msgHandler.DeleteAccount)
 	}
 
 	// Serve uploaded files

@@ -157,6 +157,16 @@ func (s *Service) GetUserByUsername(username string) (int, error) {
 	return userID, nil
 }
 
+// UserExists checks if a user with the given ID exists
+func (s *Service) UserExists(userID int) (bool, error) {
+	var exists bool
+	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", userID).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to query user: %w", err)
+	}
+	return exists, nil
+}
+
 // HashToken creates a hash of the token for display purposes (first few chars visible)
 func HashToken(token string) string {
 	hash := sha256.Sum256([]byte(token))

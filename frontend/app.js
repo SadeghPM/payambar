@@ -41,12 +41,20 @@ createApp({
             profileDisplayName: '',
             myAvatarUrl: null,
             uploadingAvatar: false,
+            deleteAccountConfirm: '',
+            deletingAccount: false,
             // Context menu state
             contextMenu: {
                 show: false,
                 x: 0,
                 y: 0,
                 message: null,
+            },
+            conversationMenu: {
+                show: false,
+                x: 0,
+                y: 0,
+                conversation: null,
             },
             // Offline state
             isOffline: !navigator.onLine,
@@ -284,6 +292,9 @@ createApp({
             this.showProfileModal = false;
             this.profileDisplayName = '';
             this.myAvatarUrl = null;
+            this.deleteAccountConfirm = '';
+            this.deletingAccount = false;
+            this.conversationMenu = { show: false, x: 0, y: 0, conversation: null };
             this.serverOffline = false;
             localStorage.clear();
             if (this.ws) {
@@ -326,6 +337,35 @@ createApp({
             } catch (err) {
                 console.error('Error saving profile:', err);
                 alert('خطا در ذخیره پروفایل');
+            }
+        },
+        async deleteAccount() {
+            if (!this.username || this.deleteAccountConfirm.trim() !== this.username) {
+                alert('نام کاربری وارد شده صحیح نیست');
+                return;
+            }
+
+            if (!confirm('این عملیات غیرقابل بازگشت است. آیا از حذف حساب اطمینان دارید؟')) {
+                return;
+            }
+
+            this.deletingAccount = true;
+            try {
+                const res = await fetch(`${API_URL}/profile`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${this.token}` },
+                });
+                if (!res.ok) {
+                    const errData = await res.json();
+                    throw new Error(errData.error || 'Delete failed');
+                }
+                this.clearAuth();
+                alert('حساب کاربری حذف شد');
+            } catch (err) {
+                console.error('Error deleting account:', err);
+                alert('خطا در حذف حساب');
+            } finally {
+                this.deletingAccount = false;
             }
         },
         async handleAvatarUpload(event) {
@@ -388,6 +428,7 @@ createApp({
             }
         },
         async selectConversation(conv) {
+            this.closeConversationMenu();
             this.currentConversationId = conv.user_id;
             this.currentConversationUsername = conv.username;
             this.currentConversationDisplayName = conv.display_name || '';
@@ -407,8 +448,16 @@ createApp({
                     headers: { Authorization: `Bearer ${this.token}` },
                 });
                 if (!res.ok) {
-                    this.clearAuth();
-                    return;
+                    if (res.status === 401) {
+                        this.clearAuth();
+                        return;
+                    }
+                    if (res.status === 404) {
+                        this.closeConversation();
+                        this.loadConversations();
+                        return;
+                    }
+                    throw new Error('Failed to load messages');
                 }
                 const data = await res.json();
                 this.messages[conv.user_id] = data.messages || [];
@@ -550,7 +599,13 @@ createApp({
                 const res = await fetch(`${API_URL}/messages?user_id=${this.currentConversationId}&limit=50&offset=${offset}`, {
                     headers: { Authorization: `Bearer ${this.token}` },
                 });
-                if (!res.ok) return;
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        this.closeConversation();
+                        this.loadConversations();
+                    }
+                    return;
+                }
                 
                 const data = await res.json();
                 const olderMessages = data.messages || [];
@@ -629,7 +684,13 @@ createApp({
                 const res = await fetch(`${API_URL}/messages?user_id=${this.currentConversationId}&limit=50`, {
                     headers: { Authorization: `Bearer ${this.token}` },
                 });
-                if (!res.ok) return;
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        this.closeConversation();
+                        this.loadConversations();
+                    }
+                    return;
+                }
                 
                 const data = await res.json();
                 this.messages[this.currentConversationId] = data.messages || [];
@@ -665,7 +726,14 @@ createApp({
             else this.chatListOpen = !this.chatListOpen;
         },
         goBackToList() {
+            this.closeConversation();
+        },
+        closeConversation() {
             this.currentConversationId = null;
+            this.currentConversationUsername = '';
+            this.currentConversationDisplayName = '';
+            this.currentConversationAvatarUrl = null;
+            this.currentConversationIsOnline = false;
             this.chatListOpen = true;
         },
         connectWebSocket() {
@@ -921,6 +989,84 @@ createApp({
         closeContextMenu() {
             this.contextMenu.show = false;
             this.contextMenu.message = null;
+        },
+        openConversationMenu(event, conversation) {
+            const targetRect = event?.currentTarget?.getBoundingClientRect
+                ? event.currentTarget.getBoundingClientRect()
+                : null;
+
+            const padding = 12;
+            const menuWidth = 160;
+            const menuHeight = 56;
+
+            let x = targetRect ? targetRect.left : (event.clientX || event.pageX || 0);
+            let y = targetRect ? targetRect.bottom : (event.clientY || event.pageY || 0);
+
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            if (x + menuWidth + padding > viewportWidth) {
+                x = viewportWidth - menuWidth - padding;
+            }
+            if (x < padding) x = padding;
+
+            if (y + menuHeight + padding > viewportHeight) {
+                y = targetRect ? targetRect.top - menuHeight : viewportHeight - menuHeight - padding;
+            }
+            if (y < padding) y = padding;
+
+            this.conversationMenu = {
+                show: true,
+                x,
+                y,
+                conversation,
+            };
+        },
+        closeConversationMenu() {
+            this.conversationMenu.show = false;
+            this.conversationMenu.conversation = null;
+        },
+        async deleteConversation(conversation) {
+            if (!conversation || !conversation.id) {
+                this.closeConversationMenu();
+                return;
+            }
+
+            if (!confirm('آیا از حذف این مکالمه اطمینان دارید؟')) {
+                this.closeConversationMenu();
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/conversations/${conversation.id}`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${this.token}` },
+                });
+
+                if (!res.ok) {
+                    if (res.status === 404) {
+                        this.closeConversation();
+                        this.loadConversations();
+                        return;
+                    }
+                    const errData = await res.json();
+                    throw new Error(errData.error || 'Delete failed');
+                }
+
+                this.conversations = this.conversations.filter(c => c.id !== conversation.id);
+                delete this.messages[conversation.user_id];
+
+                if (this.currentConversationId === conversation.user_id) {
+                    this.closeConversation();
+                }
+
+                this.loadConversations();
+            } catch (err) {
+                console.error('Error deleting conversation:', err);
+                alert('خطا در حذف مکالمه');
+            } finally {
+                this.closeConversationMenu();
+            }
         },
         async deleteMessage() {
             const message = this.contextMenu.message;

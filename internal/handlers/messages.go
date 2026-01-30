@@ -28,14 +28,46 @@ type MessageHandler struct {
 	db            *sql.DB
 	onlineChecker OnlineChecker
 	broadcaster   MessageBroadcaster
+	uploadDir     string
 }
 
-func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker) *MessageHandler {
+func isLocalUploadPath(uploadDir, filePath string) bool {
+	if filePath == "" {
+		return false
+	}
+	absUploadDir, err := filepath.Abs(uploadDir)
+	if err != nil {
+		return false
+	}
+	absFilePath, err := filepath.Abs(filePath)
+	if err != nil {
+		return false
+	}
+	absUploadDir = filepath.Clean(absUploadDir)
+	absFilePath = filepath.Clean(absFilePath)
+	if absFilePath == absUploadDir {
+		return true
+	}
+	return strings.HasPrefix(absFilePath, absUploadDir+string(os.PathSeparator))
+}
+
+func localPathFromAvatarURL(avatarURL, uploadDir string) (string, bool) {
+	if !strings.HasPrefix(avatarURL, "/api/files/") {
+		return "", false
+	}
+	fileName := filepath.Base(strings.TrimPrefix(avatarURL, "/api/files/"))
+	if fileName == "." || fileName == "/" || fileName == "" {
+		return "", false
+	}
+	return filepath.Join(uploadDir, fileName), true
+}
+
+func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir string) *MessageHandler {
 	var broadcaster MessageBroadcaster
 	if b, ok := onlineChecker.(MessageBroadcaster); ok {
 		broadcaster = b
 	}
-	return &MessageHandler{db: db, onlineChecker: onlineChecker, broadcaster: broadcaster}
+	return &MessageHandler{db: db, onlineChecker: onlineChecker, broadcaster: broadcaster, uploadDir: uploadDir}
 }
 
 // ConversationPreview represents a conversation in the list view
@@ -82,6 +114,22 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 	}
 
 	currentUserID := userID.(int)
+
+	// Ensure conversation exists to prevent stale UI states
+	pattern1 := strconv.Itoa(currentUserID) + "," + strconv.Itoa(otherUserID)
+	pattern2 := strconv.Itoa(otherUserID) + "," + strconv.Itoa(currentUserID)
+	var convExists bool
+	if err := h.db.QueryRow(
+		"SELECT EXISTS(SELECT 1 FROM conversations WHERE participants = ? OR participants = ?)",
+		pattern1, pattern2,
+	).Scan(&convExists); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check conversation"})
+		return
+	}
+	if !convExists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
+		return
+	}
 
 	// Get messages between the two users with file attachments in single query (fixes N+1)
 	rows, err := h.db.Query(`
@@ -613,6 +661,134 @@ func (h *MessageHandler) CreateConversation(c *gin.Context) {
 	})
 }
 
+// DeleteConversation deletes a conversation and its messages/files (participant-only)
+func (h *MessageHandler) DeleteConversation(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	convIDStr := c.Param("id")
+	convID, err := strconv.Atoi(convIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		return
+	}
+
+	currentUserID := userID.(int)
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start transaction"})
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var participantsStr string
+	err = tx.QueryRow("SELECT participants FROM conversations WHERE id = ?", convID).Scan(&participantsStr)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch conversation"})
+		return
+	}
+
+	parts := strings.Split(participantsStr, ",")
+	participantIDs := make([]int, 0, len(parts))
+	hasCurrent := false
+	for _, p := range parts {
+		pid, err := strconv.Atoi(strings.TrimSpace(p))
+		if err != nil || pid <= 0 {
+			continue
+		}
+		participantIDs = append(participantIDs, pid)
+		if pid == currentUserID {
+			hasCurrent = true
+		}
+	}
+
+	if !hasCurrent {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not a participant"})
+		return
+	}
+	if len(participantIDs) < 2 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid participants"})
+		return
+	}
+	if len(participantIDs) > 2 {
+		participantIDs = participantIDs[:2]
+	}
+
+	p1 := participantIDs[0]
+	p2 := participantIDs[1]
+
+	filePaths := []string{}
+	fileRows, err := tx.Query(`
+		SELECT f.file_path FROM files f
+		INNER JOIN messages m ON f.message_id = m.id
+		WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)
+	`, p1, p2, p2, p1)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch files"})
+		return
+	}
+	for fileRows.Next() {
+		var fp string
+		if err := fileRows.Scan(&fp); err == nil && fp != "" {
+			filePaths = append(filePaths, fp)
+		}
+	}
+	fileRows.Close()
+
+	_, err = tx.Exec(`
+		DELETE FROM files WHERE message_id IN (
+			SELECT id FROM messages
+			WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+		)
+	`, p1, p2, p2, p1)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete files"})
+		return
+	}
+
+	_, err = tx.Exec(`
+		DELETE FROM messages
+		WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
+	`, p1, p2, p2, p1)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete messages"})
+		return
+	}
+
+	_, err = tx.Exec("DELETE FROM conversations WHERE id = ?", convID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete conversation"})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit delete"})
+		return
+	}
+	committed = true
+
+	for _, fp := range filePaths {
+		if isLocalUploadPath(h.uploadDir, fp) {
+			_ = os.Remove(fp)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
 // UploadFile handles file uploads
 func (h *MessageHandler) UploadFile(c *gin.Context) {
 	userID, exists := c.Get("user_id")
@@ -779,6 +955,109 @@ func (h *MessageHandler) UploadAvatar(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"avatar_url": avatarURL,
 	})
+}
+
+// DeleteAccount deletes the current user's account and all related data/files
+func (h *MessageHandler) DeleteAccount(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	currentUserID := userID.(int)
+
+	tx, err := h.db.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start transaction"})
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var avatarURL sql.NullString
+	if err := tx.QueryRow("SELECT avatar_url FROM users WHERE id = ?", currentUserID).Scan(&avatarURL); err != nil {
+		if err == sql.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user"})
+		return
+	}
+
+	filePaths := []string{}
+	fileRows, err := tx.Query(`
+		SELECT f.file_path FROM files f
+		INNER JOIN messages m ON f.message_id = m.id
+		WHERE m.sender_id = ? OR m.receiver_id = ?
+	`, currentUserID, currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch files"})
+		return
+	}
+	for fileRows.Next() {
+		var fp string
+		if err := fileRows.Scan(&fp); err == nil && fp != "" {
+			filePaths = append(filePaths, fp)
+		}
+	}
+	fileRows.Close()
+
+	_, err = tx.Exec(`
+		DELETE FROM files WHERE message_id IN (
+			SELECT id FROM messages WHERE sender_id = ? OR receiver_id = ?
+		)
+	`, currentUserID, currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete files"})
+		return
+	}
+
+	_, err = tx.Exec("DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?", currentUserID, currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete messages"})
+		return
+	}
+
+	pattern1 := strconv.Itoa(currentUserID) + ",%"
+	pattern2 := "%," + strconv.Itoa(currentUserID)
+	_, err = tx.Exec("DELETE FROM conversations WHERE participants LIKE ? OR participants LIKE ?", pattern1, pattern2)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete conversations"})
+		return
+	}
+
+	_, err = tx.Exec("DELETE FROM users WHERE id = ?", currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit delete"})
+		return
+	}
+	committed = true
+
+	for _, fp := range filePaths {
+		if isLocalUploadPath(h.uploadDir, fp) {
+			_ = os.Remove(fp)
+		}
+	}
+
+	if avatarURL.Valid {
+		if avatarPath, ok := localPathFromAvatarURL(avatarURL.String, h.uploadDir); ok {
+			if isLocalUploadPath(h.uploadDir, avatarPath) {
+				_ = os.Remove(avatarPath)
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
 }
 
 // GetMyProfile returns the current user's profile
