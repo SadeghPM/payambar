@@ -55,7 +55,7 @@
                         <span v-else>{{ username ? username.charAt(0).toUpperCase() : '?' }}</span>
                     </div>
                     <div class="user-profile-info" @click="showProfileModal = true" style="cursor: pointer;">
-                        <div class="user-profile-name">{{ profileDisplayName || ('@' + username) }}</div>
+                        <div class="user-profile-name">{{ profileDisplayName || (username) }}</div>
                         <div class="user-profile-status">آنلاین</div>
                     </div>
                     <button class="logout-btn" @click="handleLogout">خروج</button>
@@ -65,10 +65,10 @@
                     <h2>پیام‌ها</h2>
                     <button class="icon-btn ghost" @click="openNewChat" aria-label="مکالمه جدید">＋</button>
                 </div>
-                <div class="search-bar">
+                <!-- <div class="search-bar">
                     <span class="icon-text" aria-hidden="true">⌕</span>
                     <input type="text" v-model="searchQuery" placeholder="جستجو مکالمه..." aria-label="جستجو مکالمه">
-                </div>
+                </div> -->
                 <div class="conversations-list">
                     <div v-if="loadingConversations" class="conversation-skeleton-list">
                         <div v-for="n in 6" :key="'skeleton-' + n" class="conversation-item skeleton">
@@ -91,7 +91,7 @@
                             <span v-if="conv.is_online" class="online-indicator"></span>
                         </div>
                         <div class="conversation-info">
-                            <div class="conversation-username">{{ conv.display_name || ('@' + conv.username) }}</div>
+                            <div class="conversation-username">{{ conv.display_name || (conv.username) }}</div>
                         </div>
                         <div class="conversation-actions">
                             <div v-if="conv.unread_count > 0" class="unread-badge">{{ conv.unread_count }}</div>
@@ -123,13 +123,13 @@
                                 <span v-if="currentConversationIsOnline" class="online-indicator"></span>
                             </div>
                             <div class="chat-header-text">
-                                <span class="chat-header-name">{{ currentConversationDisplayName || ('@' + currentConversationUsername) }}</span>
+                                <span class="chat-header-name">{{ currentConversationDisplayName || ( currentConversationUsername) }}</span>
                                 <span class="chat-header-status" v-if="currentConversationIsOnline">آنلاین</span>
                             </div>
                         </template>
                     </div>
                     <div class="header-actions">
-                        <button class="icon-btn ghost" v-show="currentConversationId" @click="shareProfile" aria-label="اشتراک پروفایل">↗</button>
+                        <!-- <button class="icon-btn ghost" v-show="currentConversationId" @click="shareProfile" aria-label="اشتراک پروفایل">↗</button> -->
                     </div>
                 </div>
 
