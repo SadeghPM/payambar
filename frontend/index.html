@@ -70,7 +70,15 @@
                     <input type="text" v-model="searchQuery" placeholder="جستجو مکالمه..." aria-label="جستجو مکالمه">
                 </div>
                 <div class="conversations-list">
-                    <div v-if="filteredConversations.length === 0" class="empty-state">هیچ مکالمه‌ای نیست</div>
+                    <div v-if="loadingConversations" class="conversation-skeleton-list">
+                        <div v-for="n in 6" :key="'skeleton-' + n" class="conversation-item skeleton">
+                            <div class="conversation-avatar skeleton-avatar"></div>
+                            <div class="conversation-info">
+                                <div class="skeleton-line skeleton-name"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else-if="filteredConversations.length === 0" class="empty-state">هیچ مکالمه‌ای نیست</div>
                     <div v-else 
                         v-for="conv in filteredConversations" 
                         :key="conv.id"
@@ -118,14 +126,6 @@
                     @touchstart="handlePullStart"
                     @touchmove="handlePullMove"
                     @touchend="handlePullEnd">
-                    <!-- Pull to refresh indicator -->
-                    <div class="pull-to-refresh-indicator" 
-                        :class="{ visible: pullToRefresh.pulling || pullToRefresh.refreshing || pullToRefresh.ready, ready: pullToRefresh.ready }"
-                        :style="(pullToRefresh.pulling || pullToRefresh.refreshing) ? { transform: `translateY(-${pullToRefresh.currentY}px)` } : null">
-                        <div v-if="pullToRefresh.refreshing" class="refresh-spinner">↻</div>
-                        <div v-else-if="pullToRefresh.currentY >= pullToRefresh.threshold" class="refresh-hint">رها کنید</div>
-                            <div v-else class="refresh-hint">برای بروزرسانی به بالا بکشید</div>
-                    </div>
                     <div v-if="!currentConversationId" class="empty-state">یک مکالمه را انتخاب کنید</div>
                     <div v-else-if="loadingMessages" class="empty-state">در حال بارگذاری...</div>
                     <div v-else-if="messagesForCurrent.length === 0" class="empty-state">هنوز پیام‌ای وجود ندارد</div>
@@ -153,6 +153,14 @@
                                     aria-label="گزینه‌های پیام">⋯</button>
                             </div>
                         </div>
+                    </div>
+                    <!-- Pull to refresh indicator (below messages list) -->
+                    <div v-if="currentConversationId" class="pull-to-refresh-indicator" 
+                        :class="{ visible: pullToRefresh.pulling || pullToRefresh.refreshing, ready: pullToRefresh.currentY >= pullToRefresh.threshold }"
+                        :style="(pullToRefresh.pulling || pullToRefresh.refreshing) ? { transform: `translateY(-${pullToRefresh.currentY}px)` } : null">
+                        <div v-if="pullToRefresh.refreshing" class="refresh-spinner">↻</div>
+                        <div v-else-if="pullToRefresh.currentY >= pullToRefresh.threshold" class="refresh-hint">رها کنید</div>
+                        <div v-else class="refresh-hint">برای بروزرسانی به بالا بکشید</div>
                     </div>
                 </div>
 

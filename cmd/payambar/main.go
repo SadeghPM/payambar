@@ -11,6 +11,7 @@ import (
 	"path"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/sadeghpm/payambar/internal/auth"
@@ -18,10 +19,35 @@ import (
 	"github.com/sadeghpm/payambar/internal/handlers"
 	"github.com/sadeghpm/payambar/internal/ws"
 	"github.com/sadeghpm/payambar/pkg/config"
+	"github.com/ulule/limiter/v3"
+	"github.com/ulule/limiter/v3/drivers/store/memory"
 )
 
 //go:embed static/*
 var staticFS embed.FS
+
+func rateLimitMiddleware(limiterInstance *limiter.Limiter) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		limiterContext, err := limiterInstance.Get(c.Request.Context(), c.ClientIP())
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "rate limiter error"})
+			c.Abort()
+			return
+		}
+
+		c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", limiterContext.Limit))
+		c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", limiterContext.Remaining))
+		c.Header("X-RateLimit-Reset", fmt.Sprintf("%d", limiterContext.Reset))
+
+		if limiterContext.Reached {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
 
 func main() {
 	// Load configuration
@@ -74,9 +100,12 @@ func main() {
 	// Public endpoints
 	api := router.Group("/api")
 	{
+		loginLimiter := limiter.New(memory.NewStore(), limiter.Rate{Period: time.Minute, Limit: 5})
+		registerLimiter := limiter.New(memory.NewStore(), limiter.Rate{Period: time.Minute, Limit: 2})
+
 		// Auth endpoints
-		api.POST("/auth/register", authHandler.Register)
-		api.POST("/auth/login", authHandler.Login)
+		api.POST("/auth/register", rateLimitMiddleware(registerLimiter), authHandler.Register)
+		api.POST("/auth/login", rateLimitMiddleware(loginLimiter), authHandler.Login)
 
 		// Public profile endpoint
 		api.GET("/users/:username", msgHandler.GetUserProfile)

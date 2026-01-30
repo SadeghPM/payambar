@@ -34,6 +34,7 @@ createApp({
             chatListOpen: true,
             loadingMessages: false,
             loadingOlderMessages: false,
+            loadingConversations: false,
             hasMoreMessages: {},
             uploadingFile: false,
             showProfileModal: false,
@@ -365,6 +366,7 @@ createApp({
             }
         },
         async loadConversations() {
+            this.loadingConversations = true;
             try {
                 const res = await fetch(`${API_URL}/conversations`, {
                     headers: { Authorization: `Bearer ${this.token}` },
@@ -381,6 +383,8 @@ createApp({
             } catch (err) {
                 console.error(err);
                 this.serverOffline = true;
+            } finally {
+                this.loadingConversations = false;
             }
         },
         async selectConversation(conv) {
