@@ -39,8 +39,9 @@ type MessageEvent struct {
 	CreatedAt   time.Time  `json:"created_at,omitempty"`
 	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
 	ReadAt      *time.Time `json:"read_at,omitempty"`
-	FileName    string     `json:"file_name,omitempty"`
-	FileURL     string     `json:"file_url,omitempty"`
+	FileName    string                 `json:"file_name,omitempty"`
+	FileURL     string                 `json:"file_url,omitempty"`
+	Payload     map[string]interface{} `json:"payload,omitempty"`
 }
 
 var upgrader = websocket.Upgrader{
@@ -176,6 +177,16 @@ func (h *Hub) broadcast_message(message interface{}) {
 				}
 			}
 			h.mu.RUnlock()
+		} else {
+			// WebRTC signaling - forward only to receiver
+			h.mu.RLock()
+			if client, ok := h.clients[msg.ReceiverID]; ok {
+				select {
+				case client.send <- msg:
+				default:
+				}
+			}
+			h.mu.RUnlock()
 		}
 	}
 }
@@ -245,6 +256,8 @@ func (c *Client) readPump() {
 			c.handleMarkDelivered(event)
 		case "mark_read":
 			c.handleMarkRead(event)
+		case "call_offer", "call_answer", "ice_candidate", "call_reject", "call_hangup":
+			c.handleSignalingEvent(event)
 		}
 	}
 }
@@ -285,6 +298,25 @@ func (c *Client) handleMessageEvent(event map[string]interface{}) {
 		Content:     content,
 		Status:      "sent",
 		CreatedAt:   time.Now(),
+	}
+
+	c.hub.broadcast <- msg
+}
+
+func (c *Client) handleSignalingEvent(event map[string]interface{}) {
+	receiverID, ok := event["receiver_id"].(float64)
+	if !ok {
+		return
+	}
+
+	eventType, _ := event["type"].(string)
+	payload, _ := event["payload"].(map[string]interface{})
+
+	msg := &MessageEvent{
+		Type:       eventType,
+		SenderID:   c.userID,
+		ReceiverID: int(receiverID),
+		Payload:    payload,
 	}
 
 	c.hub.broadcast <- msg

@@ -68,6 +68,18 @@ createApp({
                 threshold: 80,
                 ready: false,
             },
+            // WebRTC Call state
+            iceServers: [],
+            localStream: null,
+            remoteStream: null,
+            peerConnection: null,
+            incomingCall: null, // { sender_id, username, displayName, avatar_url, offer }
+            outgoingCall: null, // { receiver_id, username, displayName, avatar_url, status }
+            activeCall: null,   // { user_id, username, displayName, avatar_url }
+            callDuration: '',
+            callTimer: null,
+            callStartTime: null,
+            audioEnabled: true,
         };
     },
     computed: {
@@ -97,6 +109,7 @@ createApp({
             this.loadConversations();
             this.loadMyProfile();
             this.connectWebSocket();
+            this.fetchWebRTCConfig();
         }
         // Listen for online/offline events
         window.addEventListener('online', () => { 
@@ -305,6 +318,21 @@ createApp({
         handleLogout() {
             if (confirm('آیا از خروج اطمینان دارید؟')) {
                 this.clearAuth();
+            }
+        },
+        async fetchWebRTCConfig() {
+            try {
+                const res = await fetch(`${API_URL}/webrtc/config`, {
+                    headers: { Authorization: `Bearer ${this.token}` },
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    this.iceServers = data.iceServers || [];
+                }
+            } catch (err) {
+                console.error('Error fetching WebRTC config:', err);
+                // Fallback to default Google STUN
+                this.iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
             }
         },
         async loadMyProfile() {
@@ -768,7 +796,43 @@ createApp({
             };
         },
         handleWebSocketMessage(data) {
-            if (data.type === 'message') {
+            if (data.type === 'call_offer') {
+                if (this.activeCall || this.incomingCall || this.outgoingCall) {
+                    this.ws.send(JSON.stringify({ type: 'call_reject', receiver_id: data.sender_id, payload: { reason: 'busy' } }));
+                    return;
+                }
+                // Fetch sender info if not in conversations
+                const sender = this.conversations.find(c => c.user_id === data.sender_id) || { username: 'کاربر', user_id: data.sender_id };
+                this.incomingCall = {
+                    sender_id: data.sender_id,
+                    username: sender.username,
+                    displayName: sender.display_name,
+                    avatar_url: sender.avatar_url,
+                    offer: data.payload.offer
+                };
+            } else if (data.type === 'call_answer') {
+                if (this.outgoingCall && this.outgoingCall.receiver_id === data.sender_id) {
+                    this.peerConnection.setRemoteDescription(new RTCSessionDescription(data.payload.answer));
+                    this.activeCall = { ...this.outgoingCall, user_id: this.outgoingCall.receiver_id };
+                    this.outgoingCall = null;
+                    this.startCallTimer();
+                }
+            } else if (data.type === 'ice_candidate') {
+                if (this.peerConnection) {
+                    this.peerConnection.addIceCandidate(new RTCIceCandidate(data.payload.candidate));
+                }
+            } else if (data.type === 'call_reject') {
+                if (this.outgoingCall && this.outgoingCall.receiver_id === data.sender_id) {
+                    alert('تماس رد شد');
+                    this.saveCallLogMessage(this.outgoingCall.receiver_id, 'تماس ناموفق');
+                    this.endCall();
+                }
+            } else if (data.type === 'call_hangup') {
+                if ((this.activeCall && this.activeCall.user_id === data.sender_id) ||
+                    (this.incomingCall && this.incomingCall.sender_id === data.sender_id)) {
+                    this.endCall();
+                }
+            } else if (data.type === 'message') {
                 const convUser = data.sender_id === this.userId ? data.receiver_id : data.sender_id;
                 if (!this.messages[convUser]) this.messages[convUser] = [];
 
@@ -1104,6 +1168,164 @@ createApp({
                 alert('خطا در حذف پیام');
             } finally {
                 this.closeContextMenu();
+            }
+        },
+        // WebRTC Call Methods
+        async startCall() {
+            if (this.activeCall || this.outgoingCall || this.incomingCall) return;
+            if (this.currentConversationId === this.userId) return;
+
+            const receiverId = this.currentConversationId;
+            const username = this.currentConversationUsername;
+            const displayName = this.currentConversationDisplayName;
+            const avatarUrl = this.currentConversationAvatarUrl;
+
+            this.outgoingCall = { receiver_id: receiverId, username, displayName, avatarUrl, status: 'calling' };
+
+            try {
+                this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                this.setupPeerConnection(receiverId);
+                this.localStream.getTracks().forEach(track => this.peerConnection.addTrack(track, this.localStream));
+
+                const offer = await this.peerConnection.createOffer();
+                await this.peerConnection.setLocalDescription(offer);
+
+                this.ws.send(JSON.stringify({
+                    type: 'call_offer',
+                    receiver_id: receiverId,
+                    payload: { offer }
+                }));
+            } catch (err) {
+                console.error('Failed to start call:', err);
+                alert('خطا در دسترسی به میکروفون');
+                this.endCall();
+            }
+        },
+        async acceptCall() {
+            if (!this.incomingCall) return;
+            const senderId = this.incomingCall.sender_id;
+
+            try {
+                this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                this.setupPeerConnection(senderId);
+                this.localStream.getTracks().forEach(track => this.peerConnection.getSenders().length === 0 && this.peerConnection.addTrack(track, this.localStream));
+
+                await this.peerConnection.setRemoteDescription(new RTCSessionDescription(this.incomingCall.offer));
+                const answer = await this.peerConnection.createAnswer();
+                await this.peerConnection.setLocalDescription(answer);
+
+                this.ws.send(JSON.stringify({
+                    type: 'call_answer',
+                    receiver_id: senderId,
+                    payload: { answer }
+                }));
+
+                this.activeCall = {
+                    user_id: senderId,
+                    username: this.incomingCall.username,
+                    displayName: this.incomingCall.displayName,
+                    avatar_url: this.incomingCall.avatar_url
+                };
+                this.incomingCall = null;
+                this.startCallTimer();
+            } catch (err) {
+                console.error('Failed to accept call:', err);
+                alert('خطا در دسترسی به میکروفون');
+                this.rejectCall();
+            }
+        },
+        rejectCall() {
+            if (!this.incomingCall) return;
+            this.ws.send(JSON.stringify({
+                type: 'call_reject',
+                receiver_id: this.incomingCall.sender_id
+            }));
+            this.saveCallLogMessage(this.incomingCall.sender_id, 'تماس ناموفق');
+            this.incomingCall = null;
+        },
+        endCall() {
+            if (this.activeCall) {
+                this.ws.send(JSON.stringify({
+                    type: 'call_hangup',
+                    receiver_id: this.activeCall.user_id
+                }));
+                this.saveCallLogMessage(this.activeCall.user_id, 'تماس صوتی');
+            } else if (this.outgoingCall) {
+                this.ws.send(JSON.stringify({
+                    type: 'call_hangup',
+                    receiver_id: this.outgoingCall.receiver_id
+                }));
+                this.saveCallLogMessage(this.outgoingCall.receiver_id, 'تماس ناموفق');
+            }
+
+            if (this.peerConnection) {
+                this.peerConnection.close();
+                this.peerConnection = null;
+            }
+            if (this.localStream) {
+                this.localStream.getTracks().forEach(track => track.stop());
+                this.localStream = null;
+            }
+
+            const remoteAudio = document.getElementById('remote-audio');
+            if (remoteAudio) remoteAudio.srcObject = null;
+
+            this.stopCallTimer();
+            this.activeCall = null;
+            this.outgoingCall = null;
+            this.incomingCall = null;
+        },
+        setupPeerConnection(otherUserId) {
+            this.peerConnection = new RTCPeerConnection({ iceServers: this.iceServers });
+
+            this.peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    this.ws.send(JSON.stringify({
+                        type: 'ice_candidate',
+                        receiver_id: otherUserId,
+                        payload: { candidate: event.candidate }
+                    }));
+                }
+            };
+
+            this.peerConnection.ontrack = (event) => {
+                this.remoteStream = event.streams[0];
+                let remoteAudio = document.getElementById('remote-audio');
+                if (!remoteAudio) {
+                    remoteAudio = document.createElement('audio');
+                    remoteAudio.id = 'remote-audio';
+                    remoteAudio.autoplay = true;
+                    document.body.appendChild(remoteAudio);
+                }
+                remoteAudio.srcObject = this.remoteStream;
+            };
+        },
+        startCallTimer() {
+            this.callStartTime = Date.now();
+            this.callTimer = setInterval(() => {
+                const now = Date.now();
+                const diff = Math.floor((now - this.callStartTime) / 1000);
+                const minutes = Math.floor(diff / 60).toString().padStart(2, '0');
+                const seconds = (diff % 60).toString().padStart(2, '0');
+                this.callDuration = `${minutes}:${seconds}`;
+            }, 1000);
+        },
+        stopCallTimer() {
+            if (this.callTimer) {
+                clearInterval(this.callTimer);
+                this.callTimer = null;
+            }
+            this.callDuration = '';
+            this.callStartTime = null;
+        },
+        saveCallLogMessage(otherUserId, content) {
+            // Send a regular message for call history
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({
+                    type: 'message',
+                    receiver_id: otherUserId,
+                    content: content
+                }));
             }
         },
     },
