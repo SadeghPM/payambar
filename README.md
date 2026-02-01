@@ -6,6 +6,7 @@ A minimal 1-to-1 messaging system built with Go 1.25+ (backend), WebSocket (real
 
 - ✅ Username-based registration & login (JWT auth)
 - ✅ Real-time 1-to-1 messaging via WebSocket
+- ✅ One-to-one voice calling (WebRTC)
 - ✅ Message status tracking (sent, delivered, read)
 - ✅ Public shareable user profiles (`/u/{username}`)
 - ✅ Account deletion and conversation cleanup
@@ -121,6 +122,9 @@ payambar/
 ### WebSocket (Protected)
 - `GET /ws` - WebSocket connection for real-time messaging
 
+### WebRTC (Protected)
+- `GET /api/webrtc/config` - Get STUN/TURN server configuration
+
 ### Public
 - `GET /users/{username}` - Get public user profile
 - `GET /health` - Health check
@@ -159,16 +163,29 @@ docker-compose up -d
 docker update --restart unless-stopped payambar
 ```
 
-### 2. CDN Configuration (Cloudflare)
+### 2. CDN & Voice Call Configuration
 
-1. Add DNS records pointing to VPS IP
-2. Create Page Rules:
-   - Cache Level: Cache Everything for `/`
-   - Browser Cache TTL: 30 minutes for `/`
-3. Enable SSL/TLS (Full mode)
-4. Add origin certificate for VPS backend
+If your main domain is behind a CDN (like Cloudflare), WebRTC (voice calls) will require a **direct subdomain** to bypass the CDN for media traffic.
 
-### 3. Environment Variables
+1.  **DNS Records**:
+    *   `example.com` -> VPS IP (Proxied by CDN)
+    *   `turn.example.com` -> VPS IP (**DNS Only / Unproxied**)
+2.  **CDN Page Rules**:
+    *   Cache Level: Cache Everything for `/`
+    *   Browser Cache TTL: 30 minutes for `/`
+3.  **SSL/TLS**: Enable Full mode.
+4.  **Firewall**: Open ports `3478/tcp`, `3478/udp`, and `49152:65535/udp` (for TURN relay) on your VPS.
+
+### 3. Voice Calling (WebRTC) Setup
+
+The application includes a bundled **Coturn** server. To enable it in production:
+
+1. Set `TURN_ENABLED=true`
+2. Set `TURN_EXTERNAL_IP` to your VPS Public IP.
+3. Set `TURN_REALM` to your direct subdomain (e.g., `turn.example.com`).
+4. Configure `TURN_SERVER`, `TURN_USERNAME`, and `TURN_PASSWORD` in your environment.
+
+### 4. Environment Variables
 
 Create `.env` file in VPS:
 
@@ -177,6 +194,15 @@ JWT_SECRET=your-secure-random-key
 DATABASE_PATH=/data/payambar.db
 CORS_ORIGINS=https://yourdomain.com
 ENVIRONMENT=production
+
+# Voice Calling (WebRTC)
+TURN_ENABLED=true
+TURN_EXTERNAL_IP=YOUR_VPS_PUBLIC_IP
+TURN_REALM=turn.yourdomain.com
+STUN_SERVERS=stun:turn.yourdomain.com:3478
+TURN_SERVER=turn:turn.yourdomain.com:3478
+TURN_USERNAME=payambar
+TURN_PASSWORD=your-strong-password
 ```
 
 ### 4. Backup SQLite Database
@@ -200,6 +226,13 @@ JWT_SECRET          # Secret key for JWT signing (REQUIRED in production)
 CORS_ORIGINS        # CORS allowed origins (default: *)
 MAX_UPLOAD_SIZE     # Max file upload size in bytes (default: 10485760 = 10MB)
 FILE_STORAGE_PATH   # Directory for uploaded files (default: /data/uploads)
+STUN_SERVERS        # Comma-separated STUN servers (default: stun:stun.l.google.com:19302)
+TURN_SERVER         # TURN server URL
+TURN_USERNAME       # TURN username
+TURN_PASSWORD       # TURN password
+TURN_ENABLED        # Enable bundled Coturn server (default: false)
+TURN_EXTERNAL_IP    # Public IP for bundled Coturn
+TURN_REALM          # Realm (domain) for bundled Coturn
 ```
 
 ## Development
