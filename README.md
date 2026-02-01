@@ -123,32 +123,166 @@ PORT=8080 \
   ./bin/payambar
 ```
 
-### Docker
+### Docker (Quick Start)
 ```bash
 # Pull and run pre-built image from GHCR
 docker run -p 8080:8080 \
   -e JWT_SECRET=your-secure-key \
   -v payambar_data:/data \
   ghcr.io/sadeghpm/payambar:latest
-
-# Or build locally
-make docker-build
-docker-compose up -d
 ```
 
-### VPS Setup
-1. **Prepare Server**: Install Docker on your VPS.
-2. **Setup Project**: Download `docker-compose.yml` and create a `.env` file with your `JWT_SECRET`.
-3. **Run**: `docker-compose up -d`.
+---
 
-### WebRTC & CDN Configuration
-If using a CDN (like Cloudflare), WebRTC requires a **direct subdomain** to bypass the CDN for media traffic.
+## Docker Compose Setup
 
-1. **DNS**: Point `turn.example.com` directly to your VPS IP (DNS Only/Unproxied).
-2. **Firewall**: Open ports `3478/tcp`, `3478/udp`, and the UDP relay range (default `49152:49252/udp`).
-3. **Performance**: It is highly recommended to use `network_mode: "host"` in `docker-compose.yml` to avoid UDP NAT issues.
+This section provides step-by-step instructions to deploy Payambar using Docker Compose.
 
-To use the bundled Coturn server, set `TURN_ENABLED=true` and configure the `TURN_*` environment variables accordingly.
+### Step 1: Download Files
+
+Download the `docker-compose.yml` file to your server:
+```bash
+mkdir payambar && cd payambar
+curl -O https://raw.githubusercontent.com/sadeghpm/payambar/main/docker-compose.yml
+```
+
+### Step 2: Create Environment File
+
+Create a `.env` file in the same directory with your configuration:
+
+```bash
+# .env file example
+
+# Required - Change this to a secure random string!
+JWT_SECRET=your-super-secret-key-change-this-in-production
+
+# Optional - Allowed CORS origins (default: *)
+CORS_ORIGINS=https://yourdomain.com
+
+# Optional - TURN Server Configuration (for voice calling)
+TURN_ENABLED=false
+TURN_EXTERNAL_IP=
+TURN_REALM=
+TURN_USERNAME=
+TURN_PASSWORD=
+TURN_SERVER=
+STUN_SERVERS=stun:stun.l.google.com:19302
+```
+
+### Step 3: Start the Application
+
+```bash
+# Start in detached mode
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Check status
+docker-compose ps
+```
+
+### Step 4: Verify Installation
+
+Open your browser and navigate to `http://your-server-ip:8080`. You should see the Payambar login page.
+
+### Common Docker Compose Commands
+
+```bash
+# Stop the application
+docker-compose down
+
+# Restart the application
+docker-compose restart
+
+# Update to latest image
+docker-compose pull && docker-compose up -d
+
+# View real-time logs
+docker-compose logs -f payambar
+```
+
+---
+
+## TURN Server Configuration
+
+For voice calling to work reliably (especially behind NAT/firewalls), you need a TURN server. Payambar includes a bundled Coturn server.
+
+### Option 1: Use Bundled Coturn Server
+
+Enable the bundled TURN server by setting these environment variables in your `.env` file:
+
+```bash
+# Enable bundled Coturn
+TURN_ENABLED=true
+
+# Your server's public IP address (required)
+TURN_EXTERNAL_IP=203.0.113.50
+
+# TURN realm (usually your domain)
+TURN_REALM=yourdomain.com
+
+# TURN credentials (clients will use these)
+TURN_USERNAME=turnuser
+TURN_PASSWORD=your-turn-password
+
+# TURN server URL that clients will connect to
+TURN_SERVER=turn:yourdomain.com:3478
+```
+
+### Option 2: Use External TURN Server
+
+If you have an existing TURN server, configure only these variables:
+
+```bash
+TURN_SERVER=turn:turn.example.com:3478
+TURN_USERNAME=your-username
+TURN_PASSWORD=your-password
+```
+
+### Firewall Requirements
+
+Open these ports on your server firewall:
+
+| Port | Protocol | Description |
+|------|----------|-------------|
+| 8080 | TCP | HTTP/WebSocket |
+| 3478 | TCP | TURN signaling |
+| 3478 | UDP | TURN signaling |
+| 49152-49252 | UDP | TURN relay range |
+
+Example for `ufw`:
+```bash
+sudo ufw allow 8080/tcp
+sudo ufw allow 3478/tcp
+sudo ufw allow 3478/udp
+sudo ufw allow 49152:49252/udp
+```
+
+### CDN Configuration (Cloudflare, etc.)
+
+If using a CDN like Cloudflare, WebRTC requires a **direct subdomain** to bypass the CDN for media traffic:
+
+1. **Main Domain**: `yourdomain.com` → Proxied (orange cloud) ✅
+2. **TURN Subdomain**: `turn.yourdomain.com` → DNS Only (grey cloud) ⚠️
+
+> **Important**: The TURN subdomain must point directly to your server IP without CDN proxy.
+
+### Host Network Mode (Recommended)
+
+For best TURN server performance, use host network mode. Edit `docker-compose.yml`:
+
+```yaml
+services:
+  payambar:
+    image: ghcr.io/sadeghpm/payambar:latest
+    network_mode: "host"  # Add this line
+    # ports:              # Remove or comment out ports section
+    #   - "8080:8080"
+    #   ...
+```
+
+> **Note**: When using `network_mode: "host"`, remove the `ports` section as it's not needed.
 
 ### Backup
 ```bash
