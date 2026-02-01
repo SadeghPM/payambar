@@ -824,13 +824,12 @@ createApp({
             } else if (data.type === 'call_reject') {
                 if (this.outgoingCall && this.outgoingCall.receiver_id === data.sender_id) {
                     alert('تماس رد شد');
-                    this.saveCallLogMessage(this.outgoingCall.receiver_id, 'تماس ناموفق');
-                    this.endCall();
+                    this.endCall(false);
                 }
             } else if (data.type === 'call_hangup') {
                 if ((this.activeCall && this.activeCall.user_id === data.sender_id) ||
                     (this.incomingCall && this.incomingCall.sender_id === data.sender_id)) {
-                    this.endCall();
+                    this.endCall(false);
                 }
             } else if (data.type === 'message') {
                 const convUser = data.sender_id === this.userId ? data.receiver_id : data.sender_id;
@@ -1243,19 +1242,24 @@ createApp({
             this.saveCallLogMessage(this.incomingCall.sender_id, 'تماس ناموفق');
             this.incomingCall = null;
         },
-        endCall() {
+        endCall(isInitiator = true) {
             if (this.activeCall) {
-                this.ws.send(JSON.stringify({
-                    type: 'call_hangup',
-                    receiver_id: this.activeCall.user_id
-                }));
-                this.saveCallLogMessage(this.activeCall.user_id, 'تماس صوتی');
+                if (isInitiator) {
+                    this.ws.send(JSON.stringify({
+                        type: 'call_hangup',
+                        receiver_id: this.activeCall.user_id
+                    }));
+                    const duration = this.callDuration ? ` (${this.callDuration})` : '';
+                    this.saveCallLogMessage(this.activeCall.user_id, `تماس صوتی${duration}`);
+                }
             } else if (this.outgoingCall) {
-                this.ws.send(JSON.stringify({
-                    type: 'call_hangup',
-                    receiver_id: this.outgoingCall.receiver_id
-                }));
-                this.saveCallLogMessage(this.outgoingCall.receiver_id, 'تماس ناموفق');
+                if (isInitiator) {
+                    this.ws.send(JSON.stringify({
+                        type: 'call_hangup',
+                        receiver_id: this.outgoingCall.receiver_id
+                    }));
+                    this.saveCallLogMessage(this.outgoingCall.receiver_id, 'تماس ناموفق');
+                }
             }
 
             if (this.peerConnection) {
