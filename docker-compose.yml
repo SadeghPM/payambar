@@ -1,4 +1,4 @@
-version: '3.8'
+# Payambar Docker Compose Configuration
 
 services:
   payambar:
@@ -30,7 +30,7 @@ services:
       STUN_SERVERS: "${STUN_SERVERS:-stun:stun.l.google.com:19302}"
       TURN_SERVER: "${TURN_SERVER:-}"
     volumes:
-      - payambar_data:/data
+      - ./data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT:-8080}/health"]
@@ -38,7 +38,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-volumes:
-  payambar_data:
-    driver: local
