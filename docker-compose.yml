@@ -10,12 +10,12 @@ services:
     # network_mode: "host" # Recommended for Coturn performance and avoiding UDP NAT issues.
     # If using host mode, remove the 'ports' section below.
     ports:
-      - "8080:8080"
+      - "${PORT:-8080}:${PORT:-8080}"
       - "3478:3478"
       - "3478:3478/udp"
       - "49152-49252:49152-49252/udp"
     environment:
-      PORT: "8080"
+      PORT: "${PORT:-8080}"
       ENVIRONMENT: "production"
       DATABASE_PATH: "/data/payambar.db"
       JWT_SECRET: "${JWT_SECRET:-your-secret-key-change-this}"
@@ -33,7 +33,7 @@ services:
       - payambar_data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT:-8080}/health"]
       interval: 30s
       timeout: 10s
       retries: 3

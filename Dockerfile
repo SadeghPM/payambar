@@ -25,8 +25,8 @@ RUN chmod +x docker-entrypoint.sh
 # Create data directory
 RUN mkdir -p /data
 
-# Payambar port
-EXPOSE 8080
+# Payambar port (configurable via PORT env var, default 8080)
+EXPOSE 8080 8082
 # TURN/STUN ports
 EXPOSE 3478 3478/udp
 # TURN relay ports (UDP range)
