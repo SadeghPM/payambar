@@ -22,6 +22,13 @@ verbose
 no-cli
 no-tls
 no-dtls
+no-multicast-peers
+# Allow private IP ranges for users behind NAT
+allowed-peer-ip=10.0.0.0-10.255.255.255
+allowed-peer-ip=172.16.0.0-172.31.255.255
+allowed-peer-ip=192.168.0.0-192.168.255.255
+# Allow all public IPs
+allowed-peer-ip=0.0.0.0-255.255.255.255
 EOF
 
     if [ -n "$TURN_EXTERNAL_IP" ]; then
