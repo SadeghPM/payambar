@@ -11,12 +11,17 @@ if [ "$TURN_ENABLED" = "true" ]; then
     # Generate TURN config
     cat <<EOF > /etc/coturn/turnserver.conf
 listening-port=3478
+listening-ip=0.0.0.0
 fingerprint
 lt-cred-mech
 realm=$REALM
 min-port=49152
 max-port=49252
 log-file=stdout
+verbose
+no-cli
+no-tls
+no-dtls
 EOF
 
     if [ -n "$TURN_EXTERNAL_IP" ]; then
