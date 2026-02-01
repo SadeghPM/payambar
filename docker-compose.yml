@@ -7,11 +7,13 @@ services:
     #   context: .
     #   dockerfile: Dockerfile
     container_name: payambar
-    # network_mode: "host" # Recommended for Coturn performance and avoiding UDP NAT issues
+    # network_mode: "host" # Recommended for Coturn performance and avoiding UDP NAT issues.
+    # If using host mode, remove the 'ports' section below.
     ports:
       - "8080:8080"
       - "3478:3478"
       - "3478:3478/udp"
+      - "49152-49252:49152-49252/udp"
     environment:
       PORT: "8080"
       ENVIRONMENT: "production"

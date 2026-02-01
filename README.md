@@ -174,7 +174,9 @@ If your main domain is behind a CDN (like Cloudflare), WebRTC (voice calls) will
     *   Cache Level: Cache Everything for `/`
     *   Browser Cache TTL: 30 minutes for `/`
 3.  **SSL/TLS**: Enable Full mode.
-4.  **Firewall**: Open ports `3478/tcp`, `3478/udp`, and `49152:65535/udp` (for TURN relay) on your VPS.
+4.  **Firewall**: Open ports `3478/tcp`, `3478/udp`, and the UDP relay range (e.g., `49152:49252/udp`) on your VPS.
+
+> **Note**: For better performance and to avoid UDP NAT issues with WebRTC, it is highly recommended to use `network_mode: "host"` in your `docker-compose.yml`. If you use host mode, you don't need to map individual ports.
 
 ### 3. Voice Calling (WebRTC) Setup
 
@@ -227,7 +229,7 @@ CORS_ORIGINS        # CORS allowed origins (default: *)
 MAX_UPLOAD_SIZE     # Max file upload size in bytes (default: 10485760 = 10MB)
 FILE_STORAGE_PATH   # Directory for uploaded files (default: /data/uploads)
 STUN_SERVERS        # Comma-separated STUN servers (default: stun:stun.l.google.com:19302)
-TURN_SERVER         # TURN server URL
+TURN_SERVER         # TURN server URL (e.g. turn:yourdomain.com:3478)
 TURN_USERNAME       # TURN username
 TURN_PASSWORD       # TURN password
 TURN_ENABLED        # Enable bundled Coturn server (default: false)

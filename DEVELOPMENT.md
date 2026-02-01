@@ -222,6 +222,13 @@ created_at: TIMESTAMP
 | `CORS_ORIGINS` | * | CORS allowed origins |
 | `MAX_UPLOAD_SIZE` | 10485760 | Max file size (bytes) |
 | `FILE_STORAGE_PATH` | /data/uploads | Directory for uploads |
+| `STUN_SERVERS` | stun:stun.l.google.com:19302 | Comma-separated STUN servers |
+| `TURN_SERVER` | (optional) | TURN server URL (e.g. turn:domain:3478) |
+| `TURN_USERNAME` | (optional) | TURN server username |
+| `TURN_PASSWORD` | (optional) | TURN server password |
+| `TURN_ENABLED` | false | Enable bundled Coturn server |
+| `TURN_EXTERNAL_IP` | (optional) | Public IP for bundled Coturn |
+| `TURN_REALM` | (optional) | Realm for bundled Coturn |
 
 ### Production Setup
 
