@@ -1396,3 +1396,117 @@ button {
 .context-menu-icon {
     font-size: 1rem;
 }
+
+/* Call Styles */
+.call-btn {
+    color: #22c55e !important;
+}
+
+.incoming-call-modal {
+    background: var(--surface);
+    padding: 1.5rem;
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-soft);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    text-align: center;
+}
+
+.call-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    font-weight: bold;
+    overflow: hidden;
+}
+
+.call-actions {
+    display: flex;
+    gap: 1rem;
+    width: 100%;
+}
+
+.call-actions button {
+    flex: 1;
+    padding: 0.75rem;
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: opacity 0.2s;
+}
+
+.call-actions button:hover {
+    opacity: 0.9;
+}
+
+.btn-accept {
+    background: #22c55e;
+    color: white;
+}
+
+.btn-decline {
+    background: #ef4444;
+    color: white;
+}
+
+.active-call-bar {
+    background: #22c55e;
+    color: white;
+    padding: 0.5rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    z-index: 6;
+}
+
+.active-call-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.pulse-icon {
+    color: white;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.4; }
+    100% { opacity: 1; }
+}
+
+.active-call-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.btn-hangup {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.btn-hangup:hover {
+    background: #dc2626;
+}

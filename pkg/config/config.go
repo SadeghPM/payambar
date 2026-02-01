@@ -13,6 +13,7 @@ type Config struct {
 	CORSOrigins     string
 	MaxUploadSize   int64
 	FileStoragePath string
+	StunServers     string
 }
 
 func Load() *Config {
@@ -24,6 +25,7 @@ func Load() *Config {
 		CORSOrigins:     getEnv("CORS_ORIGINS", "*"),
 		MaxUploadSize:   parseInt64(getEnv("MAX_UPLOAD_SIZE", "10485760")), // 10MB default
 		FileStoragePath: getEnv("FILE_STORAGE_PATH", "./data/uploads"),
+		StunServers:     getEnv("STUN_SERVERS", "stun:stun.l.google.com:19302"),
 	}
 }
 

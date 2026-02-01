@@ -73,7 +73,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authSvc)
-	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub, cfg.FileStoragePath)
+	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub, cfg.FileStoragePath, cfg.StunServers)
 
 	// Setup router
 	if cfg.Environment == "production" {
@@ -131,6 +131,9 @@ func main() {
 		protected.PUT("/profile", msgHandler.UpdateProfile)
 		protected.POST("/profile/avatar", msgHandler.UploadAvatar)
 		protected.DELETE("/profile", msgHandler.DeleteAccount)
+
+		// WebRTC
+		protected.GET("/webrtc/config", msgHandler.GetWebRTCConfig)
 	}
 
 	// Serve uploaded files

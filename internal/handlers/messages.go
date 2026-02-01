@@ -29,6 +29,7 @@ type MessageHandler struct {
 	onlineChecker OnlineChecker
 	broadcaster   MessageBroadcaster
 	uploadDir     string
+	stunServers   string
 }
 
 func isLocalUploadPath(uploadDir, filePath string) bool {
@@ -62,12 +63,18 @@ func localPathFromAvatarURL(avatarURL, uploadDir string) (string, bool) {
 	return filepath.Join(uploadDir, fileName), true
 }
 
-func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir string) *MessageHandler {
+func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir, stunServers string) *MessageHandler {
 	var broadcaster MessageBroadcaster
 	if b, ok := onlineChecker.(MessageBroadcaster); ok {
 		broadcaster = b
 	}
-	return &MessageHandler{db: db, onlineChecker: onlineChecker, broadcaster: broadcaster, uploadDir: uploadDir}
+	return &MessageHandler{
+		db:            db,
+		onlineChecker: onlineChecker,
+		broadcaster:   broadcaster,
+		uploadDir:     uploadDir,
+		stunServers:   stunServers,
+	}
 }
 
 // ConversationPreview represents a conversation in the list view
@@ -1079,4 +1086,16 @@ func (h *MessageHandler) GetMyProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, user)
+}
+
+// GetWebRTCConfig returns STUN/TURN server configuration
+func (h *MessageHandler) GetWebRTCConfig(c *gin.Context) {
+	servers := strings.Split(h.stunServers, ",")
+	iceServers := []gin.H{}
+	for _, s := range servers {
+		if s != "" {
+			iceServers = append(iceServers, gin.H{"urls": strings.TrimSpace(s)})
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"iceServers": iceServers})
 }
