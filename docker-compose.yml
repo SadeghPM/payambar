@@ -7,13 +7,8 @@ services:
     #   context: .
     #   dockerfile: Dockerfile
     container_name: payambar
-    # network_mode: "host" # Recommended for Coturn performance and avoiding UDP NAT issues.
-    # If using host mode, remove the 'ports' section below.
-    ports:
-      - "${PORT:-8080}:${PORT:-8080}"
-      - "3478:3478"
-      - "3478:3478/udp"
-      - "49152-49252:49152-49252/udp"
+    network_mode: "host"  # Required for TURN server - uses host network directly
+    # Note: When using host mode, ports are not mapped - the app listens directly on host ports
     environment:
       PORT: "${PORT:-8080}"
       ENVIRONMENT: "production"

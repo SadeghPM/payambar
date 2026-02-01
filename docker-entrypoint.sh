@@ -26,6 +26,7 @@ EOF
 
     if [ -n "$TURN_EXTERNAL_IP" ]; then
         echo "external-ip=$TURN_EXTERNAL_IP" >> /etc/coturn/turnserver.conf
+        echo "relay-ip=$TURN_EXTERNAL_IP" >> /etc/coturn/turnserver.conf
     fi
 
     if [ -n "$TURN_USERNAME" ] && [ -n "$TURN_PASSWORD" ]; then
