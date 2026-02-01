@@ -111,44 +111,56 @@ ws.send(JSON.stringify({type: 'message', receiver_id: 2, content: 'Hello'}));
 
 ## Deployment
 
-### Production Build (Binary)
+### Docker Compose (Recommended)
+The easiest way to deploy Payambar is using Docker Compose. It handles the application and the bundled Coturn server for WebRTC.
+
+1. **Download Config**:
+   ```bash
+   wget https://raw.githubusercontent.com/sadeghpm/payambar/main/docker-compose.yml
+   ```
+
+2. **Create `.env` file**:
+   Configure your server by creating a `.env` file in the same directory:
+   ```bash
+   JWT_SECRET=your-strong-random-secret
+   ENVIRONMENT=production
+   CORS_ORIGINS=https://messenger.yourdomain.com
+   ```
+
+3. **Start**:
+   ```bash
+   docker-compose up -d
+   ```
+
+### Voice Calling (WebRTC) Setup
+For reliable voice calls, especially behind NAT or Firewalls, you must enable the bundled **Coturn** server.
+
+1. **Direct Subdomain**: WebRTC traffic cannot pass through CDNs like Cloudflare. Point a subdomain (e.g., `turn.yourdomain.com`) directly to your VPS IP (**DNS Only / Unproxied**).
+2. **Firewall Ports**: Open the following ports on your VPS:
+   - `3478/tcp` & `3478/udp` (STUN/TURN signaling)
+   - `49152:49252/udp` (Relay port range)
+3. **Host Networking**: For maximum performance and to avoid UDP NAT traversal issues, uncomment `network_mode: "host"` in `docker-compose.yml`.
+
+#### Configuring the TURN Server in `.env`:
+Update your `.env` file with these values to activate the bundled server:
+
 ```bash
-# Build binary with embedded frontend
-make build-all
+# 1. Enable the bundled Coturn server
+TURN_ENABLED=true
 
-# Run with environment variables
-PORT=8080 \
-  DATABASE_PATH=/data/payambar.db \
-  JWT_SECRET=your-secret-key \
-  ./bin/payambar
+# 2. Set the server's public location
+TURN_EXTERNAL_IP=YOUR_VPS_PUBLIC_IP
+TURN_REALM=turn.yourdomain.com
+
+# 3. Create credentials for the TURN server
+TURN_USERNAME=payambar
+TURN_PASSWORD=choose-a-strong-password
+
+# 4. Configure the WebRTC client to use this server
+# (These values are sent to the frontend via API)
+STUN_SERVERS=stun:turn.yourdomain.com:3478
+TURN_SERVER=turn:turn.yourdomain.com:3478
 ```
-
-### Docker
-```bash
-# Pull and run pre-built image from GHCR
-docker run -p 8080:8080 \
-  -e JWT_SECRET=your-secure-key \
-  -v payambar_data:/data \
-  ghcr.io/sadeghpm/payambar:latest
-
-# Or build locally
-make docker-build
-docker-compose up -d
-```
-
-### VPS Setup
-1. **Prepare Server**: Install Docker on your VPS.
-2. **Setup Project**: Download `docker-compose.yml` and create a `.env` file with your `JWT_SECRET`.
-3. **Run**: `docker-compose up -d`.
-
-### WebRTC & CDN Configuration
-If using a CDN (like Cloudflare), WebRTC requires a **direct subdomain** to bypass the CDN for media traffic.
-
-1. **DNS**: Point `turn.example.com` directly to your VPS IP (DNS Only/Unproxied).
-2. **Firewall**: Open ports `3478/tcp`, `3478/udp`, and the UDP relay range (default `49152:49252/udp`).
-3. **Performance**: It is highly recommended to use `network_mode: "host"` in `docker-compose.yml` to avoid UDP NAT issues.
-
-To use the bundled Coturn server, set `TURN_ENABLED=true` and configure the `TURN_*` environment variables accordingly.
 
 ### Backup
 ```bash
