@@ -73,7 +73,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authSvc)
-	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub, cfg.FileStoragePath, cfg.StunServers)
+	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub, cfg.FileStoragePath, cfg.StunServers, cfg.TurnServer, cfg.TurnUsername, cfg.TurnPassword)
 
 	// Setup router
 	if cfg.Environment == "production" {

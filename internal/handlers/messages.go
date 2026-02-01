@@ -30,6 +30,9 @@ type MessageHandler struct {
 	broadcaster   MessageBroadcaster
 	uploadDir     string
 	stunServers   string
+	turnServer    string
+	turnUsername  string
+	turnPassword  string
 }
 
 func isLocalUploadPath(uploadDir, filePath string) bool {
@@ -63,7 +66,7 @@ func localPathFromAvatarURL(avatarURL, uploadDir string) (string, bool) {
 	return filepath.Join(uploadDir, fileName), true
 }
 
-func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir, stunServers string) *MessageHandler {
+func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir, stunServers, turnServer, turnUsername, turnPassword string) *MessageHandler {
 	var broadcaster MessageBroadcaster
 	if b, ok := onlineChecker.(MessageBroadcaster); ok {
 		broadcaster = b
@@ -74,6 +77,9 @@ func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir, stunS
 		broadcaster:   broadcaster,
 		uploadDir:     uploadDir,
 		stunServers:   stunServers,
+		turnServer:    turnServer,
+		turnUsername:  turnUsername,
+		turnPassword:  turnPassword,
 	}
 }
 
@@ -1090,12 +1096,30 @@ func (h *MessageHandler) GetMyProfile(c *gin.Context) {
 
 // GetWebRTCConfig returns STUN/TURN server configuration
 func (h *MessageHandler) GetWebRTCConfig(c *gin.Context) {
-	servers := strings.Split(h.stunServers, ",")
 	iceServers := []gin.H{}
-	for _, s := range servers {
+
+	// Add STUN servers
+	stunServers := strings.Split(h.stunServers, ",")
+	for _, s := range stunServers {
+		s = strings.TrimSpace(s)
 		if s != "" {
-			iceServers = append(iceServers, gin.H{"urls": strings.TrimSpace(s)})
+			iceServers = append(iceServers, gin.H{"urls": s})
 		}
 	}
+
+	// Add TURN server if configured
+	if h.turnServer != "" {
+		turnConfig := gin.H{
+			"urls": h.turnServer,
+		}
+		if h.turnUsername != "" {
+			turnConfig["username"] = h.turnUsername
+		}
+		if h.turnPassword != "" {
+			turnConfig["credential"] = h.turnPassword
+		}
+		iceServers = append(iceServers, turnConfig)
+	}
+
 	c.JSON(http.StatusOK, gin.H{"iceServers": iceServers})
 }
