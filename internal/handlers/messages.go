@@ -1107,10 +1107,18 @@ func (h *MessageHandler) GetWebRTCConfig(c *gin.Context) {
 		}
 	}
 
-	// Add TURN server if configured
+	// Add TURN server if configured (provide both UDP and TCP for mobile compatibility)
 	if h.turnServer != "" {
+		// Parse the TURN server URL to generate both UDP and TCP variants
+		// e.g., turn:turn.example.com:3478 becomes [turn:...:3478, turn:...:3478?transport=tcp]
+		turnUrls := []string{h.turnServer}
+		// Add TCP transport variant for mobile networks that block UDP
+		if !strings.Contains(h.turnServer, "transport=") {
+			turnUrls = append(turnUrls, h.turnServer+"?transport=tcp")
+		}
+
 		turnConfig := gin.H{
-			"urls": h.turnServer,
+			"urls": turnUrls,
 		}
 		if h.turnUsername != "" {
 			turnConfig["username"] = h.turnUsername
