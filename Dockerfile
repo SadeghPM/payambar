@@ -29,6 +29,8 @@ RUN mkdir -p /data
 EXPOSE 8080
 # TURN/STUN ports
 EXPOSE 3478 3478/udp
+# TURN relay ports (UDP range)
+EXPOSE 49152-49252/udp
 
 ENV PORT=8080 \
     ENVIRONMENT=production \
