@@ -1207,7 +1207,7 @@ createApp({
             try {
                 this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
                 this.setupPeerConnection(senderId);
-                this.localStream.getTracks().forEach(track => this.peerConnection.getSenders().length === 0 && this.peerConnection.addTrack(track, this.localStream));
+                this.localStream.getTracks().forEach(track => this.peerConnection.addTrack(track, this.localStream));
 
                 await this.peerConnection.setRemoteDescription(new RTCSessionDescription(this.incomingCall.offer));
                 const answer = await this.peerConnection.createAnswer();
