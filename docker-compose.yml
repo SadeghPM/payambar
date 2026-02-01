@@ -7,8 +7,11 @@ services:
     #   context: .
     #   dockerfile: Dockerfile
     container_name: payambar
+    # network_mode: "host" # Recommended for Coturn performance and avoiding UDP NAT issues
     ports:
       - "8080:8080"
+      - "3478:3478"
+      - "3478:3478/udp"
     environment:
       PORT: "8080"
       ENVIRONMENT: "production"
@@ -16,6 +19,14 @@ services:
       JWT_SECRET: "${JWT_SECRET:-your-secret-key-change-this}"
       FILE_STORAGE_PATH: "/data/uploads"
       CORS_ORIGINS: "${CORS_ORIGINS:-*}"
+      TURN_ENABLED: "${TURN_ENABLED:-false}"
+      TURN_EXTERNAL_IP: "${TURN_EXTERNAL_IP:-}"
+      TURN_REALM: "${TURN_REALM:-}"
+      TURN_USERNAME: "${TURN_USERNAME:-}"
+      TURN_PASSWORD: "${TURN_PASSWORD:-}"
+      # For WebRTC config API
+      STUN_SERVERS: "${STUN_SERVERS:-stun:stun.l.google.com:19302}"
+      TURN_SERVER: "${TURN_SERVER:-}"
     volumes:
       - payambar_data:/data
     restart: unless-stopped

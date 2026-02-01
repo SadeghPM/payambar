@@ -1302,6 +1302,8 @@ createApp({
                     document.body.appendChild(remoteAudio);
                 }
                 remoteAudio.srcObject = this.remoteStream;
+                // Explicitly play to handle some browser policies
+                remoteAudio.play().catch(err => console.error('Error playing remote audio:', err));
             };
         },
         startCallTimer() {
