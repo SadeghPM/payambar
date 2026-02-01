@@ -92,8 +92,8 @@ createApp({
             convs.sort((a, b) => this.getConversationLastTimestamp(b) - this.getConversationLastTimestamp(a));
             const q = this.searchQuery.trim().toLowerCase();
             if (!q) return convs;
-            return convs.filter((c) => 
-                c.username?.toLowerCase().includes(q) || 
+            return convs.filter((c) =>
+                c.username?.toLowerCase().includes(q) ||
                 c.display_name?.toLowerCase().includes(q)
             );
         },
@@ -112,7 +112,7 @@ createApp({
             this.fetchWebRTCConfig();
         }
         // Listen for online/offline events
-        window.addEventListener('online', () => { 
+        window.addEventListener('online', () => {
             this.isOffline = false;
             this.serverOffline = false;
             if (this.isAuthed) {
@@ -134,13 +134,13 @@ createApp({
             const storedUserId = localStorage.getItem('userId');
             const storedUsername = localStorage.getItem('username');
             const storedDisplayName = localStorage.getItem('displayName');
-            
+
             console.log('initAuth - localStorage:', { storedToken, storedUserId, storedUsername });
-            
+
             // Validate stored auth data
             const isTokenValid = storedToken && storedToken !== 'undefined' && storedToken !== 'null';
             const isUserIdValid = storedUserId && !isNaN(parseInt(storedUserId)) && parseInt(storedUserId) > 0;
-            
+
             if (isTokenValid && isUserIdValid && storedUsername) {
                 this.token = storedToken;
                 this.userId = parseInt(storedUserId);
@@ -160,21 +160,21 @@ createApp({
                 if (value === '0001-01-01T00:00:00Z' || value.startsWith('0001-01-01')) {
                     return '';
                 }
-                
+
                 const date = new Date(value);
                 if (isNaN(date.getTime())) return '';
-                
+
                 // Sanity check - if date is before year 2000, it's likely invalid
                 if (date.getFullYear() < 2000) return '';
-                
+
                 const now = new Date();
                 const diffMs = now - date;
-                
+
                 // If difference is negative (future date) or more than 10 years, something is wrong
                 if (diffMs < 0 || diffMs > 10 * 365 * 24 * 60 * 60 * 1000) {
                     return '';
                 }
-                
+
                 const diffSeconds = Math.floor(diffMs / 1000);
                 const diffMinutes = Math.floor(diffSeconds / 60);
                 const diffHours = Math.floor(diffMinutes / 60);
@@ -182,9 +182,9 @@ createApp({
                 const diffWeeks = Math.floor(diffDays / 7);
                 const diffMonths = Math.floor(diffDays / 30);
                 const diffYears = Math.floor(diffDays / 365);
-                
+
                 const rtf = new Intl.RelativeTimeFormat('fa', { numeric: 'auto' });
-                
+
                 if (diffSeconds < 60) {
                     return rtf.format(-diffSeconds, 'second');
                 } else if (diffMinutes < 60) {
@@ -311,7 +311,7 @@ createApp({
             this.serverOffline = false;
             localStorage.clear();
             if (this.ws) {
-                try { this.ws.close(); } catch (e) {}
+                try { this.ws.close(); } catch (e) { }
                 this.ws = null;
             }
         },
@@ -353,9 +353,9 @@ createApp({
             try {
                 const res = await fetch(`${API_URL}/profile`, {
                     method: 'PUT',
-                    headers: { 
+                    headers: {
                         'Content-Type': 'application/json',
-                        Authorization: `Bearer ${this.token}` 
+                        Authorization: `Bearer ${this.token}`
                     },
                     body: JSON.stringify({ display_name: this.profileDisplayName }),
                 });
@@ -464,13 +464,13 @@ createApp({
             this.currentConversationIsOnline = conv.is_online || false;
             this.loadingMessages = true;
             this.chatListOpen = false;
-            
+
             // Reset unread count for this conversation in UI
             const convIndex = this.conversations.findIndex(c => c.user_id === conv.user_id);
             if (convIndex !== -1) {
                 this.conversations[convIndex].unread_count = 0;
             }
-            
+
             try {
                 const res = await fetch(`${API_URL}/messages?user_id=${conv.user_id}&limit=50`, {
                     headers: { Authorization: `Bearer ${this.token}` },
@@ -498,7 +498,7 @@ createApp({
                 if (latestMessage?.created_at) {
                     this.updateConversationLastMessage(conv.user_id, latestMessage.created_at);
                 }
-                
+
                 // Mark all unread messages as read via WebSocket
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     for (const msg of this.messages[conv.user_id]) {
@@ -507,7 +507,7 @@ createApp({
                         }
                     }
                 }
-                
+
                 // Scroll to bottom after DOM update with delay for rendering
                 // Use longer delay for mobile devices
                 this.$nextTick(() => {
@@ -565,7 +565,7 @@ createApp({
                 });
                 if (!res.ok) throw new Error('Upload failed');
                 const data = await res.json();
-                
+
                 // Add file message to local messages
                 if (!this.messages[this.currentConversationId]) this.messages[this.currentConversationId] = [];
                 const createdAt = new Date().toISOString();
@@ -596,7 +596,7 @@ createApp({
                 requestAnimationFrame(() => {
                     container.scrollTop = container.scrollHeight;
                     this.updatePullReady(container);
-                    
+
                     // On mobile, sometimes need multiple attempts due to rendering delays
                     if (attempts < 3 && container.scrollTop < container.scrollHeight - container.clientHeight - 50) {
                         setTimeout(() => this.scrollToBottom(attempts + 1), 100);
@@ -614,14 +614,14 @@ createApp({
         },
         async loadOlderMessages() {
             if (!this.currentConversationId || this.loadingOlderMessages) return;
-            
+
             const currentMessages = this.messages[this.currentConversationId] || [];
             if (currentMessages.length === 0) return;
-            
+
             this.loadingOlderMessages = true;
             const container = document.querySelector('.messages-container');
             const oldScrollHeight = container ? container.scrollHeight : 0;
-            
+
             try {
                 const offset = currentMessages.length;
                 const res = await fetch(`${API_URL}/messages?user_id=${this.currentConversationId}&limit=50&offset=${offset}`, {
@@ -634,14 +634,14 @@ createApp({
                     }
                     return;
                 }
-                
+
                 const data = await res.json();
                 const olderMessages = data.messages || [];
-                
+
                 if (olderMessages.length > 0) {
                     // Prepend older messages to existing ones
                     this.messages[this.currentConversationId] = [...olderMessages, ...currentMessages];
-                    
+
                     // Maintain scroll position after prepending
                     this.$nextTick(() => {
                         if (container) {
@@ -650,7 +650,7 @@ createApp({
                         }
                     });
                 }
-                
+
                 // If we got less than 50, no more messages
                 this.hasMoreMessages[this.currentConversationId] = olderMessages.length >= 50;
             } catch (err) {
@@ -668,17 +668,17 @@ createApp({
             // Only enable pull-to-refresh when at end of messages
             if (distanceFromBottom > 10) return;
             this.pullToRefresh.ready = true;
-            
+
             const touch = event.touches ? event.touches[0] : event;
             this.pullToRefresh.startY = touch.clientY;
             this.pullToRefresh.pulling = true;
         },
         handlePullMove(event) {
             if (!this.pullToRefresh.pulling || this.pullToRefresh.refreshing) return;
-            
+
             const touch = event.touches ? event.touches[0] : event;
             const deltaY = touch.clientY - this.pullToRefresh.startY;
-            
+
             // Only pull up when at bottom
             if (deltaY < 0) {
                 const magnitude = Math.abs(deltaY);
@@ -693,13 +693,13 @@ createApp({
         },
         async handlePullEnd() {
             if (!this.pullToRefresh.pulling) return;
-            
+
             if (this.pullToRefresh.currentY >= this.pullToRefresh.threshold) {
                 this.pullToRefresh.refreshing = true;
                 await this.refreshCurrentConversation();
                 this.pullToRefresh.refreshing = false;
             }
-            
+
             this.pullToRefresh.pulling = false;
             this.pullToRefresh.startY = 0;
             this.pullToRefresh.currentY = 0;
@@ -707,7 +707,7 @@ createApp({
         },
         async refreshCurrentConversation() {
             if (!this.currentConversationId) return;
-            
+
             try {
                 const res = await fetch(`${API_URL}/messages?user_id=${this.currentConversationId}&limit=50`, {
                     headers: { Authorization: `Bearer ${this.token}` },
@@ -719,7 +719,7 @@ createApp({
                     }
                     return;
                 }
-                
+
                 const data = await res.json();
                 this.messages[this.currentConversationId] = data.messages || [];
                 this.hasMoreMessages[this.currentConversationId] = (data.messages || []).length >= 50;
@@ -733,7 +733,7 @@ createApp({
 
                 this.$nextTick(() => this.scrollToBottom());
                 this.updatePullReady();
-                
+
                 // Also refresh conversations list
                 this.loadConversations();
             } catch (err) {
@@ -944,10 +944,10 @@ createApp({
                         usersList.innerHTML = users.map(u => `
                             <div class="user-item" data-id="${u.id}" data-username="${u.username}" data-display-name="${u.display_name || ''}" data-avatar="${u.avatar_url || ''}" data-online="${u.is_online || false}">
                                 <div class="user-avatar-wrapper">
-                                    ${u.avatar_url 
-                                        ? `<img src="${u.avatar_url}" class="user-avatar" alt="avatar">` 
-                                        : `<span class="user-avatar-placeholder">${(u.display_name || u.username || '?').charAt(0).toUpperCase()}</span>`
-                                    }
+                                    ${u.avatar_url
+                                ? `<img src="${u.avatar_url}" class="user-avatar" alt="avatar">`
+                                : `<span class="user-avatar-placeholder">${(u.display_name || u.username || '?').charAt(0).toUpperCase()}</span>`
+                            }
                                     ${u.is_online ? '<span class="online-indicator"></span>' : ''}
                                 </div>
                                 <div class="user-info">
@@ -982,7 +982,7 @@ createApp({
 
             // Show initial hint
             usersList.innerHTML = '<p class="search-hint">نام کاربری را وارد کنید</p>';
-            
+
             document.body.appendChild(modal);
             searchInput.focus();
         },
@@ -1137,23 +1137,23 @@ createApp({
                 this.closeContextMenu();
                 return;
             }
-            
+
             if (!confirm('آیا از حذف این پیام اطمینان دارید؟')) {
                 this.closeContextMenu();
                 return;
             }
-            
+
             try {
                 const res = await fetch(`${API_URL}/messages/${message.id}`, {
                     method: 'DELETE',
                     headers: { Authorization: `Bearer ${this.token}` },
                 });
-                
+
                 if (!res.ok) {
                     const errData = await res.json();
                     throw new Error(errData.error || 'Delete failed');
                 }
-                
+
                 // Remove message from local state
                 const convMessages = this.messages[this.currentConversationId];
                 if (convMessages) {
@@ -1182,9 +1182,14 @@ createApp({
             this.outgoingCall = { receiver_id: receiverId, username, displayName, avatarUrl, status: 'calling' };
 
             try {
+                console.log('[WebRTC] startCall: Getting user media...');
                 this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                console.log('[WebRTC] startCall: Got local stream with tracks:', this.localStream.getTracks().map(t => t.kind + ':' + t.enabled));
                 this.setupPeerConnection(receiverId);
-                this.localStream.getTracks().forEach(track => this.peerConnection.addTrack(track, this.localStream));
+                this.localStream.getTracks().forEach(track => {
+                    console.log('[WebRTC] startCall: Adding track:', track.kind, track.enabled);
+                    this.peerConnection.addTrack(track, this.localStream);
+                });
 
                 const offer = await this.peerConnection.createOffer();
                 await this.peerConnection.setLocalDescription(offer);
@@ -1205,9 +1210,14 @@ createApp({
             const senderId = this.incomingCall.sender_id;
 
             try {
+                console.log('[WebRTC] acceptCall: Getting user media...');
                 this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                console.log('[WebRTC] acceptCall: Got local stream with tracks:', this.localStream.getTracks().map(t => t.kind + ':' + t.enabled));
                 this.setupPeerConnection(senderId);
-                this.localStream.getTracks().forEach(track => this.peerConnection.addTrack(track, this.localStream));
+                this.localStream.getTracks().forEach(track => {
+                    console.log('[WebRTC] acceptCall: Adding track:', track.kind, track.enabled);
+                    this.peerConnection.addTrack(track, this.localStream);
+                });
 
                 await this.peerConnection.setRemoteDescription(new RTCSessionDescription(this.incomingCall.offer));
                 const answer = await this.peerConnection.createAnswer();
@@ -1280,10 +1290,12 @@ createApp({
             this.incomingCall = null;
         },
         setupPeerConnection(otherUserId) {
+            console.log('[WebRTC] Setting up peer connection with ICE servers:', this.iceServers);
             this.peerConnection = new RTCPeerConnection({ iceServers: this.iceServers });
 
             this.peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
+                    console.log('[WebRTC] Sending ICE candidate:', event.candidate.type, event.candidate.address);
                     this.ws.send(JSON.stringify({
                         type: 'ice_candidate',
                         receiver_id: otherUserId,
@@ -1292,7 +1304,16 @@ createApp({
                 }
             };
 
+            this.peerConnection.oniceconnectionstatechange = () => {
+                console.log('[WebRTC] ICE connection state:', this.peerConnection.iceConnectionState);
+            };
+
+            this.peerConnection.onconnectionstatechange = () => {
+                console.log('[WebRTC] Connection state:', this.peerConnection.connectionState);
+            };
+
             this.peerConnection.ontrack = (event) => {
+                console.log('[WebRTC] Received remote track:', event.track.kind, event.track.enabled);
                 this.remoteStream = event.streams[0];
                 let remoteAudio = document.getElementById('remote-audio');
                 if (!remoteAudio) {

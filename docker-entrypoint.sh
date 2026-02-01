@@ -23,9 +23,6 @@ no-cli
 no-tls
 no-dtls
 no-multicast-peers
-no-loopback-peers
-# Allow all peer IPs (required for WebRTC behind NAT)
-allowed-peer-ip=0.0.0.0/0
 EOF
 
     if [ -n "$TURN_EXTERNAL_IP" ]; then
