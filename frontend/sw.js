@@ -1,5 +1,5 @@
 // Service Worker for offline support and caching
-const CACHE_NAME = 'payambar-v9';
+const CACHE_NAME = 'payambar-v10';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -35,6 +35,12 @@ self.addEventListener('activate', (event) => {
     })
   );
   self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('fetch', (event) => {

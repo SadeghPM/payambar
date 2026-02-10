@@ -225,11 +225,22 @@ createApp({
             if (msg.status === 'delivered') return '✓';
             return '';
         },
+        getPullBottomAllowance(el) {
+            if (!el) return 12;
+            const style = window.getComputedStyle(el);
+            const paddingBottom = parseFloat(style.paddingBottom) || 0;
+            return paddingBottom + 24;
+        },
+        isNearBottom(el) {
+            if (!el) return false;
+            const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+            const allowance = this.getPullBottomAllowance(el);
+            return distanceFromBottom <= (allowance + 160);
+        },
         updatePullReady(container) {
             const el = container || document.querySelector('.messages-container');
             if (!el) return;
-            const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-            this.pullToRefresh.ready = distanceFromBottom <= 12;
+            this.pullToRefresh.ready = this.isNearBottom(el);
         },
         getConversationLastTimestamp(conv) {
             if (!conv) return 0;
@@ -664,9 +675,8 @@ createApp({
             if (!this.currentConversationId || this.pullToRefresh.refreshing) return;
             const container = document.querySelector('.messages-container');
             if (!container) return;
-            const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
             // Only enable pull-to-refresh when at end of messages
-            if (distanceFromBottom > 10) return;
+            if (!this.isNearBottom(container)) return;
             this.pullToRefresh.ready = true;
 
             const touch = event.touches ? event.touches[0] : event;
