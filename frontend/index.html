@@ -22,7 +22,13 @@
 
         <div class="auth-container" v-if="!isAuthed">
             <div class="auth-card">
-                <h1>PayamBar</h1>
+                <div class="auth-brand">
+                    <div class="auth-logo">P</div>
+                    <div class="auth-title">
+                        <h1>PayamBar</h1>
+                        <p class="auth-subtitle">پیام‌رسان ساده، سریع و امن</p>
+                    </div>
+                </div>
                 <div class="auth-tabs">
                     <button class="tab-btn" :class="{active: authTab==='login'}" @click="authTab='login'">ورود</button>
                     <button class="tab-btn" :class="{active: authTab==='register'}" @click="authTab='register'">ثبت‌نام</button>
@@ -32,7 +38,7 @@
                     <input type="text" v-model="login.username" placeholder="نام‌کاربری" required>
                     <input type="password" v-model="login.password" placeholder="رمز‌عبور" required>
                     <button type="submit">ورود</button>
-                    <div class="error-message">{{ authError }}</div>
+                    <div class="error-message" v-if="authError">{{ authError }}</div>
                 </form>
 
                 <form v-else class="auth-form" @submit.prevent="handleRegister">
@@ -40,8 +46,9 @@
                     <input type="password" v-model="register.password" placeholder="رمز‌عبور" required>
                     <input type="password" v-model="register.confirm" placeholder="تکرار رمز‌عبور" required>
                     <button type="submit">ثبت‌نام</button>
-                    <div class="error-message">{{ authError }}</div>
+                    <div class="error-message" v-if="authError">{{ authError }}</div>
                 </form>
+                <div class="auth-footer">با ورود، قوانین و حریم خصوصی را می‌پذیرید.</div>
             </div>
         </div>
 
@@ -179,14 +186,14 @@
                             </div>
                         </div>
                     </div>
-                    <!-- Pull to refresh indicator (below messages list) -->
-                    <div v-if="currentConversationId" class="pull-to-refresh-indicator" 
-                        :class="{ visible: pullToRefresh.pulling || pullToRefresh.refreshing, ready: pullToRefresh.currentY >= pullToRefresh.threshold }"
-                        :style="(pullToRefresh.pulling || pullToRefresh.refreshing) ? { transform: `translateY(-${pullToRefresh.currentY}px)` } : null">
-                        <div v-if="pullToRefresh.refreshing" class="refresh-spinner">↻</div>
-                        <div v-else-if="pullToRefresh.currentY >= pullToRefresh.threshold" class="refresh-hint">رها کنید</div>
-                        <div v-else class="refresh-hint">برای بروزرسانی به بالا بکشید</div>
-                    </div>
+                </div>
+                <!-- Pull to refresh indicator (anchored above input bar) -->
+                <div v-if="currentConversationId" class="pull-to-refresh-indicator" 
+                    :class="{ visible: pullToRefresh.pulling || pullToRefresh.refreshing, ready: pullToRefresh.currentY >= pullToRefresh.threshold }"
+                    :style="(pullToRefresh.pulling || pullToRefresh.refreshing) ? { transform: `translateY(-${pullToRefresh.currentY}px)` } : null">
+                    <div v-if="pullToRefresh.refreshing" class="refresh-spinner">↻</div>
+                    <div v-else-if="pullToRefresh.currentY >= pullToRefresh.threshold" class="refresh-hint">رها کنید</div>
+                    <div v-else class="refresh-hint">برای بروزرسانی به بالا بکشید</div>
                 </div>
 
                 <!-- Context Menu -->
@@ -300,9 +307,37 @@
     <script>
         // Register Service Worker for PWA
         if ('serviceWorker' in navigator) {
+            let refreshing = false;
+
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (refreshing) return;
+                refreshing = true;
+                window.location.reload();
+            });
+
+            const sendSkipWaiting = (registration) => {
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+            };
+
+            const watchInstalling = (worker, registration) => {
+                if (!worker) return;
+                worker.addEventListener('statechange', () => {
+                    if (worker.state === 'installed' && registration.waiting) {
+                        sendSkipWaiting(registration);
+                    }
+                });
+            };
+
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js')
-                    .then(reg => console.log('SW registered:', reg.scope))
+                    .then(reg => {
+                        console.log('SW registered:', reg.scope);
+                        sendSkipWaiting(reg);
+                        watchInstalling(reg.installing, reg);
+                        reg.addEventListener('updatefound', () => watchInstalling(reg.installing, reg));
+                    })
                     .catch(err => console.error('SW registration failed:', err));
             });
         }

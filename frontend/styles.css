@@ -34,6 +34,10 @@
     --received-border: #d4d4d0;
     --secondary: #f0efeb;
     --secondary-dark: #d8d6d0;
+    --auth-accent: #0f6d4f;
+    --auth-accent-soft: #e6f3ef;
+    --auth-gradient: radial-gradient(80% 120% at 20% 10%, #f3f7f2 0%, #eef2ee 45%, #f7f7f4 100%);
+    --input-area-offset: 4.25rem;
 }
 
 * {
@@ -77,8 +81,33 @@ button {
     justify-content: center;
     align-items: center;
     height: 100%;
-    background: var(--bg);
+    background: var(--auth-gradient);
     padding: 1.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.auth-container::before,
+.auth-container::after {
+    content: '';
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    border-radius: 50%;
+    background: rgba(15, 109, 79, 0.08);
+    filter: blur(2px);
+    z-index: 0;
+}
+
+.auth-container::before {
+    top: -120px;
+    right: -90px;
+}
+
+.auth-container::after {
+    bottom: -140px;
+    left: -80px;
+    background: rgba(0, 102, 204, 0.08);
 }
 
 .auth-card {
@@ -89,14 +118,47 @@ button {
     padding: 2rem;
     width: 100%;
     max-width: 420px;
+    position: relative;
+    z-index: 1;
+    animation: authEnter 0.5s ease both;
 }
 
-.auth-card h1 {
-    text-align: center;
+@keyframes authEnter {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
     margin-bottom: 1.5rem;
+}
+
+.auth-logo {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    font-weight: 800;
+    font-size: 1.3rem;
+    color: #0b2c22;
+    background: linear-gradient(135deg, #e6f3ef, #d9ede6);
+    border: 1px solid rgba(15, 109, 79, 0.2);
+}
+
+.auth-title h1 {
+    margin: 0;
     color: var(--ink);
-    font-size: 1.75rem;
+    font-size: 1.7rem;
     letter-spacing: -0.02em;
+}
+
+.auth-subtitle {
+    margin-top: 0.2rem;
+    color: var(--muted);
+    font-size: 0.95rem;
 }
 
 .auth-tabs {
@@ -104,13 +166,16 @@ button {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
     margin-bottom: 1.25rem;
+    background: var(--surface-muted);
+    padding: 0.35rem;
+    border-radius: 999px;
 }
 
 .tab-btn {
-    padding: 0.9rem 1rem;
-    border: 1px solid var(--border);
-    background: var(--surface-muted);
-    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    border: 0;
+    background: transparent;
+    border-radius: 999px;
     cursor: pointer;
     font-weight: 600;
     color: var(--muted);
@@ -118,9 +183,9 @@ button {
 }
 
 .tab-btn.active {
-    background: var(--ink);
-    color: var(--surface);
-    border-color: var(--ink);
+    background: var(--surface);
+    color: var(--ink);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
 }
 
 .auth-form {
@@ -140,30 +205,38 @@ button {
 
 .auth-form input:focus {
     outline: none;
-    border-color: var(--ink);
-    box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.08);
+    border-color: var(--auth-accent);
+    box-shadow: 0 0 0 3px rgba(15, 109, 79, 0.15);
 }
 
 .auth-form button {
     padding: 0.9rem;
-    background: var(--ink);
+    background: var(--auth-accent);
     color: var(--surface);
-    border: 1px solid var(--ink);
+    border: 1px solid var(--auth-accent);
     border-radius: var(--radius-sm);
     font-weight: 700;
     cursor: pointer;
     transition: transform 0.1s ease, box-shadow 0.2s ease;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 10px 22px rgba(15, 109, 79, 0.2);
 }
 
 .auth-form button:hover {
     transform: translateY(-1px);
+    box-shadow: 0 14px 24px rgba(15, 109, 79, 0.22);
 }
 
 .error-message {
     color: #c53232;
     font-size: 0.9rem;
     margin-top: 0.25rem;
+}
+
+.auth-footer {
+    margin-top: 1rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
 }
 
 /* Buttons & Icons */
@@ -222,7 +295,7 @@ button {
     border-left: 1px solid var(--border);
     display: flex;
     flex-direction: column;
-    background: var(--surface);
+    background: linear-gradient(180deg, #f9faf8 0%, #ffffff 30%);
     overflow: hidden;
 }
 
@@ -244,13 +317,15 @@ button {
     align-items: center;
     position: sticky;
     top: 0;
-    background: var(--surface);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(8px);
     z-index: 5;
 }
 
 .panel-header h2 {
     font-size: 1.1rem;
     letter-spacing: -0.01em;
+    font-weight: 700;
 }
 
 .header-actions {
@@ -275,13 +350,14 @@ button {
     height: 36px;
     border-radius: 50%;
     object-fit: cover;
+    box-shadow: 0 6px 14px rgba(15, 109, 79, 0.12);
 }
 
 .chat-header-avatar-placeholder {
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: var(--primary);
+    background: linear-gradient(135deg, #0f6d4f, #1d8f68);
     color: #ffffff;
     display: flex;
     align-items: center;
@@ -304,14 +380,14 @@ button {
 }
 
 .chat-header-name {
-    font-weight: 500;
+    font-weight: 700;
     font-size: 1rem;
     line-height: 1.2;
 }
 
 .chat-header-status {
     font-size: 0.75rem;
-    color: #22c55e;
+    color: var(--auth-accent);
     font-weight: 500;
 }
 
@@ -322,14 +398,14 @@ button {
     gap: 0.75rem;
     padding: 0.75rem 1.25rem;
     border-bottom: 1px solid var(--border);
-    background: var(--surface-muted);
+    background: var(--auth-accent-soft);
 }
 
 .user-avatar {
     width: 40px;
     height: 40px;
     border-radius: 50%;
-    background: var(--primary);
+    background: linear-gradient(135deg, #0f6d4f, #1d8f68);
     color: #fff;
     display: flex;
     align-items: center;
@@ -337,6 +413,7 @@ button {
     font-weight: 700;
     font-size: 1rem;
     overflow: hidden;
+    box-shadow: 0 8px 16px rgba(15, 109, 79, 0.16);
 }
 
 .user-profile-info {
@@ -351,7 +428,7 @@ button {
 
 .user-profile-status {
     font-size: 0.8rem;
-    color: var(--muted);
+    color: #0f6d4f;
 }
 
 /* Avatar images */
@@ -374,7 +451,7 @@ button {
     height: 44px;
     min-width: 44px;
     border-radius: 50%;
-    background: var(--primary);
+    background: linear-gradient(135deg, #0f6d4f, #1d8f68);
     color: #fff;
     display: flex;
     align-items: center;
@@ -383,6 +460,7 @@ button {
     font-size: 1rem;
     overflow: hidden;
     position: relative;
+    box-shadow: 0 8px 16px rgba(15, 109, 79, 0.12);
 }
 
 /* Online status indicator */
@@ -406,18 +484,17 @@ button {
 .logout-btn {
     padding: 0.5rem 1rem;
     background: transparent;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--muted);
+    border: 1px solid rgba(15, 109, 79, 0.25);
+    border-radius: 999px;
+    color: #0f6d4f;
     font-size: 0.85rem;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .logout-btn:hover {
-    background: #fee2e2;
-    border-color: #fecaca;
-    color: #dc2626;
+    background: #eaf5f1;
+    border-color: rgba(15, 109, 79, 0.4);
 }
 
 .profile-modal-content {
@@ -469,7 +546,7 @@ button {
 
 .profile-form-group input {
     padding: 0.75rem 1rem;
-    border: 1px solid var(--border);
+    border: 1px solid #e1e6de;
     border-radius: var(--radius-sm);
     font-size: 1rem;
     background: var(--surface);
@@ -477,7 +554,8 @@ button {
 
 .profile-form-group input:focus {
     outline: none;
-    border-color: var(--ink);
+    border-color: var(--auth-accent);
+    box-shadow: 0 0 0 3px rgba(15, 109, 79, 0.12);
 }
 
 .profile-form-group input:disabled {
@@ -501,23 +579,25 @@ button {
 }
 
 .btn-primary {
-    background: var(--ink);
+    background: var(--auth-accent);
     color: var(--surface);
-    border: 1px solid var(--ink);
+    border: 1px solid var(--auth-accent);
 }
 
 .btn-primary:hover {
-    background: #15171a;
+    background: #0c5b42;
 }
 
 .btn-secondary {
     background: var(--surface);
     color: var(--ink);
-    border: 1px solid var(--border);
+    border: 1px solid #e1e6de;
 }
 
 .btn-secondary:hover {
-    background: var(--surface-muted);
+    background: #eef5f0;
+    border-color: rgba(15, 109, 79, 0.25);
+    color: var(--auth-accent);
 }
 
 .btn-danger {
@@ -570,7 +650,7 @@ button {
 }
 
 .conversation-item {
-    padding: 0.9rem 1.25rem;
+    padding: 0.85rem 1.1rem;
     border-bottom: 1px solid var(--border);
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
@@ -617,12 +697,12 @@ button {
 }
 
 .conversation-item:hover {
-    background: var(--surface-muted);
+    background: #f4f7f4;
 }
 
 .conversation-item.active {
-    background: var(--surface-muted);
-    border-inline-start: 3px solid var(--ink);
+    background: #eef5f0;
+    border-inline-start: 3px solid var(--auth-accent);
 }
 
 .conversation-info {
@@ -647,8 +727,8 @@ button {
 }
 
 .conversation-menu-btn:hover {
-    background: var(--surface-muted);
-    color: var(--ink);
+    background: #eef5f0;
+    color: var(--auth-accent);
 }
 
 .conversation-username {
@@ -666,7 +746,7 @@ button {
 }
 
 .unread-badge {
-    background: var(--ink);
+    background: var(--auth-accent);
     color: var(--surface);
     border-radius: 999px;
     min-width: 26px;
@@ -681,7 +761,7 @@ button {
 
 .empty-state {
     text-align: center;
-    color: var(--muted);
+    color: #6b726f;
     padding: 2rem 1rem;
 }
 
@@ -772,14 +852,14 @@ button {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
-    background: var(--surface);
+    background: linear-gradient(180deg, #f9faf8 0%, #ffffff 18%, #ffffff 100%);
     position: relative;
 }
 
 /* Pull to refresh styles */
 .pull-to-refresh-indicator {
-    position: absolute;
-    bottom: 0;
+    position: fixed;
+    bottom: calc(var(--input-area-offset) + env(safe-area-inset-bottom));
     left: 0;
     right: 0;
     height: 56px;
@@ -789,7 +869,7 @@ button {
     opacity: 0;
     transition: opacity 0.2s, transform 0.2s;
     pointer-events: none;
-    z-index: 4;
+    z-index: 20;
 }
 
 .pull-to-refresh-indicator.visible {
@@ -844,19 +924,20 @@ button {
     border: 1px solid var(--border);
     background: var(--surface-muted);
     color: var(--ink);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.05);
 }
 
 .message.sent .message-bubble {
-    background: var(--primary);
+    background: linear-gradient(135deg, #0f6d4f, #1d8f68);
     color: #ffffff;
-    border-color: var(--primary);
+    border-color: #0f6d4f;
     border-top-right-radius: 6px;
 }
 
 .message.received .message-bubble {
-    background: var(--received-bg);
+    background: #f1f3ef;
     color: var(--ink);
-    border-color: var(--received-border);
+    border-color: #e0e4dd;
     border-top-right-radius: 6px;
 }
 
@@ -909,7 +990,7 @@ button {
 
 .message.sent .message-time,
 .message.sent .message-status {
-    color: rgba(0, 102, 204, 0.6);
+    color: rgba(15, 109, 79, 0.7);
 }
 
 .message-footer {
@@ -928,8 +1009,8 @@ button {
 }
 
 .message-menu-btn {
-    border: 1px solid var(--border);
-    background: var(--surface);
+    border: 1px solid #e1e6de;
+    background: #ffffff;
     color: var(--muted);
     border-radius: 10px;
     padding: 0.1rem 0.45rem;
@@ -940,9 +1021,9 @@ button {
 }
 
 .message-menu-btn:hover {
-    background: var(--surface-muted);
-    color: var(--ink);
-    border-color: #d4d4d0;
+    background: #eef5f0;
+    color: var(--auth-accent);
+    border-color: rgba(15, 109, 79, 0.25);
 }
 
 .message-menu-btn:active {
@@ -952,7 +1033,8 @@ button {
 .message-input-area {
     padding: 0.75rem 1.25rem calc(1rem + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border);
-    background: var(--surface);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(8px);
     position: sticky;
     bottom: 0;
     z-index: 4;
@@ -969,8 +1051,8 @@ button {
     display: flex;
     gap: 0.65rem;
     align-items: center;
-    background: var(--surface-muted);
-    border: 1px solid var(--border);
+    background: #f1f4f0;
+    border: 1px solid #e1e6de;
     border-radius: 999px;
     padding: 0.35rem 0.35rem 0.35rem 0.75rem;
 }
@@ -992,6 +1074,8 @@ button {
     min-width: 44px;
     height: 44px;
     border-radius: 999px;
+    background: var(--auth-accent);
+    border-color: var(--auth-accent);
 }
 
 /* Modal Styles */
@@ -1021,6 +1105,7 @@ button {
     border: 1px solid var(--border);
     box-shadow: var(--shadow-soft);
     overflow: hidden;
+    background: linear-gradient(180deg, #f9faf8 0%, #ffffff 20%, #ffffff 100%);
 }
 
 @keyframes slideUp {
@@ -1034,6 +1119,8 @@ button {
     align-items: center;
     padding: 1rem 1.25rem;
     border-bottom: 1px solid var(--border);
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(8px);
 }
 
 .modal-header h3 {
@@ -1044,7 +1131,7 @@ button {
 
 .close-btn {
     background: transparent;
-    border: none;
+    border: 1px solid #e1e6de;
     font-size: 1.5rem;
     cursor: pointer;
     color: var(--muted);
@@ -1054,10 +1141,12 @@ button {
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 10px;
 }
 
 .close-btn:hover {
-    color: var(--ink);
+    color: var(--auth-accent);
+    border-color: rgba(15, 109, 79, 0.25);
 }
 
 .users-list {
@@ -1204,6 +1293,7 @@ button {
 }
 
 @media (max-width: 480px) {
+    :root { --input-area-offset: 3.5rem; }
     .messenger-container { height: 100%; background: var(--surface); }
     .chat-panel { 
         border-radius: 0;
@@ -1453,7 +1543,7 @@ button {
 }
 
 .btn-accept {
-    background: #22c55e;
+    background: #20b983;
     color: white;
 }
 
@@ -1463,7 +1553,7 @@ button {
 }
 
 .active-call-bar {
-    background: #22c55e;
+    background: linear-gradient(135deg, #0f6d4f, #1d8f68);
     color: white;
     padding: 0.5rem 1rem;
     display: flex;
@@ -1499,7 +1589,7 @@ button {
 .btn-hangup {
     background: #ef4444;
     color: white;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.4);
     padding: 0.4rem 0.8rem;
     border-radius: var(--radius-sm);
     cursor: pointer;
