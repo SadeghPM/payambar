@@ -29,6 +29,7 @@ type MessageHandler struct {
 	onlineChecker OnlineChecker
 	broadcaster   MessageBroadcaster
 	uploadDir     string
+	maxUploadSize int64
 	stunServers   string
 	turnServer    string
 	turnUsername  string
@@ -66,7 +67,7 @@ func localPathFromAvatarURL(avatarURL, uploadDir string) (string, bool) {
 	return filepath.Join(uploadDir, fileName), true
 }
 
-func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir, stunServers, turnServer, turnUsername, turnPassword string) *MessageHandler {
+func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir string, maxUploadSize int64, stunServers, turnServer, turnUsername, turnPassword string) *MessageHandler {
 	var broadcaster MessageBroadcaster
 	if b, ok := onlineChecker.(MessageBroadcaster); ok {
 		broadcaster = b
@@ -76,6 +77,7 @@ func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir, stunS
 		onlineChecker: onlineChecker,
 		broadcaster:   broadcaster,
 		uploadDir:     uploadDir,
+		maxUploadSize: maxUploadSize,
 		stunServers:   stunServers,
 		turnServer:    turnServer,
 		turnUsername:  turnUsername,
@@ -817,6 +819,11 @@ func (h *MessageHandler) UploadFile(c *gin.Context) {
 	}
 	defer file.Close()
 
+	if header.Size > h.maxUploadSize {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "file too large"})
+		return
+	}
+
 	receiverIDStr := c.PostForm("receiver_id")
 	receiverID, err := strconv.Atoi(receiverIDStr)
 	if err != nil {
@@ -933,8 +940,8 @@ func (h *MessageHandler) UploadAvatar(c *gin.Context) {
 	}
 
 	// Limit file size to 2MB
-	if header.Size > 2*1024*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar must be smaller than 2MB"})
+	if header.Size > 500*1024 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar must be smaller than 500KB"})
 		return
 	}
 

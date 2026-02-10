@@ -73,7 +73,7 @@ func main() {
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authSvc)
-	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub, cfg.FileStoragePath, cfg.StunServers, cfg.TurnServer, cfg.TurnUsername, cfg.TurnPassword)
+	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub, cfg.FileStoragePath, cfg.MaxUploadSize, cfg.StunServers, cfg.TurnServer, cfg.TurnUsername, cfg.TurnPassword)
 
 	// Setup router
 	if cfg.Environment == "production" {
@@ -81,6 +81,7 @@ func main() {
 	}
 
 	router := gin.Default()
+	router.MaxMultipartMemory = cfg.MaxUploadSize
 
 	// CORS middleware
 	router.Use(func(c *gin.Context) {
