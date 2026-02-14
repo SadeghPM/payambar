@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sadeghpm/payambar/internal/auth"
-	"github.com/sadeghpm/payambar/internal/db"
-	"github.com/sadeghpm/payambar/internal/handlers"
-	"github.com/sadeghpm/payambar/internal/ws"
-	"github.com/sadeghpm/payambar/pkg/config"
+	"github.com/4xmen/payambar/internal/auth"
+	"github.com/4xmen/payambar/internal/db"
+	"github.com/4xmen/payambar/internal/handlers"
+	"github.com/4xmen/payambar/internal/ws"
+	"github.com/4xmen/payambar/pkg/config"
 	"github.com/ulule/limiter/v3"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
 )

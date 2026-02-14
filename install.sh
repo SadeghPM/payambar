@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SERVICE_NAME="payambar"
-REPO="sadeghpm/payambar"
+REPO="4xmen/payambar"
 INSTALL_DIR="/opt/${SERVICE_NAME}"
 DATA_DIR="/var/lib/${SERVICE_NAME}"
 UPLOAD_DIR="${DATA_DIR}/uploads"

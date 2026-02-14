@@ -4,7 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sadeghpm/payambar/internal/auth"
+	"github.com/4xmen/payambar/internal/auth"
 )
 
 type AuthHandler struct {

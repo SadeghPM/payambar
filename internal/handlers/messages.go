@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/sadeghpm/payambar/internal/models"
+	"github.com/4xmen/payambar/internal/models"
 )
 
 // OnlineChecker interface for checking user online status

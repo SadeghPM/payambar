@@ -20,7 +20,7 @@ A lean 1-to-1 messenger built in Go with embedded frontend, WebSocket real-time 
 Requirements: Ubuntu 20.04+, `curl`, `python3`, `tar`, (`unzip` if the release is a zip), `systemd`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sadeghpm/payambar/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/4xmen/payambar/main/install.sh | sudo bash
 ```
 What it does:
 - Fetches the latest release asset from GitHub and installs the `payambar` binary to `/opt/payambar`.
@@ -37,7 +37,7 @@ sudo journalctl -u payambar -f
 ### 2) Docker Compose
 ```bash
 mkdir payambar && cd payambar
-curl -O https://raw.githubusercontent.com/sadeghpm/payambar/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/4xmen/payambar/main/docker-compose.yml
 cat > .env <<'EOF'
 JWT_SECRET=change-me
 # Optional:

@@ -2,7 +2,7 @@
 
 services:
   payambar:
-    image: ghcr.io/sadeghpm/payambar:latest
+    image: ghcr.io/4xmen/payambar:latest
     # build:
     #   context: .
     #   dockerfile: Dockerfile

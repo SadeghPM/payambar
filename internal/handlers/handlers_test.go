@@ -12,7 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/sadeghpm/payambar/internal/auth"
+	"github.com/4xmen/payambar/internal/auth"
 )
 
 var (
