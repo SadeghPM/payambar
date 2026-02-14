@@ -99,7 +99,7 @@ func setupTestRouter() *gin.Engine {
 	router := gin.New()
 
 	authHandler := NewAuthHandler(testAuthSvc)
-	msgHandler := NewMessageHandler(testDB, nil, testUploadDir, "", "", "", "")
+	msgHandler := NewMessageHandler(testDB, nil, testUploadDir, 10_485_760, "", "", "", "")
 
 	api := router.Group("/api")
 	{
