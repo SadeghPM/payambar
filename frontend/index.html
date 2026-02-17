@@ -167,9 +167,16 @@
                         <div v-for="msg in messagesForCurrent" :key="msg.id || msg.client_message_id" class="message" :class="Number(msg.sender_id) === Number(userId) ? 'sent' : 'received'">
                             <div class="message-bubble">
                                 <template v-if="msg.file_url">
-                                    <a :href="msg.file_url" target="_blank" class="file-link" download>
-                                        📎 {{ msg.file_name || 'دانلود فایل' }}
-                                    </a>
+                                    <template v-if="isAudioMessage(msg)">
+                                        <div class="voice-message">
+                                            <audio :src="msg.file_url" controls preload="metadata"></audio>
+                                        </div>
+                                    </template>
+                                    <template v-else>
+                                        <a :href="msg.file_url" target="_blank" class="file-link" download>
+                                            📎 {{ msg.file_name || 'دانلود فایل' }}
+                                        </a>
+                                    </template>
                                 </template>
                                 <template v-else>{{ msg.content }}</template>
                             </div>
@@ -209,9 +216,20 @@
                     <div class="input-container">
                         <input type="file" ref="fileInput" @change="handleFileSelect" style="display: none">
                         <button class="icon-btn ghost" @click="$refs.fileInput.click()" aria-label="پیوست فایل">📎</button>
+                        <button
+                            class="icon-btn ghost"
+                            :class="{ recording: recordingVoice }"
+                            @click="toggleVoiceRecording"
+                            :disabled="uploadingFile || sendingVoice"
+                            :aria-label="recordingVoice ? 'توقف ضبط' : 'ضبط صدا'"
+                            :title="recordingVoice ? 'توقف ضبط و ارسال' : 'ضبط پیام صوتی'">🎤</button>
                         <input type="text" v-model="messageText" placeholder="پیام..." aria-label="نوشتن پیام" @keyup.enter="sendMessage">
                         <button class="icon-btn solid" @click="sendMessage" aria-label="ارسال">></button>
                     </div>
+                    <div v-if="recordingVoice" class="recording-indicator">
+                        در حال ضبط صدا: {{ formatRecordingDuration(recordingElapsedSec) }}
+                    </div>
+                    <div v-if="sendingVoice" class="upload-progress">در حال ارسال پیام صوتی...</div>
                     <div v-if="uploadingFile" class="upload-progress">در حال آپلود...</div>
                 </div>
             </div>

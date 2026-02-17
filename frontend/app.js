@@ -87,6 +87,13 @@ const app = createApp({
             loadingConversations: false,
             hasMoreMessages: {},
             uploadingFile: false,
+            recordingVoice: false,
+            recordingElapsedSec: 0,
+            recordingTimer: null,
+            recordingStream: null,
+            mediaRecorder: null,
+            recordedChunks: [],
+            sendingVoice: false,
             showNewChatModal: false,
             newChatSearchQuery: '',
             newChatSearchResults: [],
@@ -184,6 +191,9 @@ const app = createApp({
         });
         window.addEventListener('offline', () => { this.isOffline = true; });
     },
+    beforeUnmount() {
+        this.cleanupVoiceRecorder();
+    },
     methods: {
         initAuth() {
             const storedToken = localStorage.getItem('token');
@@ -280,6 +290,24 @@ const app = createApp({
             if (msg.status === 'read') return '✓✓';
             if (msg.status === 'delivered') return '✓';
             return '';
+        },
+        formatRecordingDuration(seconds) {
+            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = (seconds % 60).toString().padStart(2, '0');
+            return `${mins}:${secs}`;
+        },
+        isAudioMessage(msg) {
+            if (!msg || !msg.file_url) return false;
+            const contentType = typeof msg.file_content_type === 'string' ? msg.file_content_type.toLowerCase() : '';
+            if (contentType.startsWith('audio/')) return true;
+            const fileName = (msg.file_name || '').toLowerCase();
+            return (
+                fileName.endsWith('.webm') ||
+                fileName.endsWith('.ogg') ||
+                fileName.endsWith('.mp3') ||
+                fileName.endsWith('.wav') ||
+                fileName.endsWith('.m4a')
+            );
         },
         getPullBottomAllowance(el) {
             if (!el) return 12;
@@ -379,6 +407,7 @@ const app = createApp({
             this.newChatSearchResults = [];
             this.newChatSearchLoading = false;
             this.newChatSearchError = '';
+            this.cleanupVoiceRecorder();
             this.conversationMenu = { show: false, x: 0, y: 0, conversation: null };
             this.serverOffline = false;
             if (this.newChatSearchTimeout) {
@@ -624,8 +653,7 @@ const app = createApp({
             }));
             this.$nextTick(() => this.scrollToBottom());
         },
-        async handleFileSelect(event) {
-            const file = event.target.files[0];
+        async sendFileMessage(file) {
             if (!file || !this.currentConversationId) return;
 
             this.uploadingFile = true;
@@ -641,29 +669,133 @@ const app = createApp({
                 });
                 if (!res.ok) throw new Error('Upload failed');
                 const data = await res.json();
+                const messageID = Number(data.message_id);
+                const wsOpen = this.ws && this.ws.readyState === WebSocket.OPEN;
 
-                // Add file message to local messages
-                if (!this.messages[this.currentConversationId]) this.messages[this.currentConversationId] = [];
-                const createdAt = new Date().toISOString();
-                this.messages[this.currentConversationId].push({
-                    id: data.message_id,
-                    sender_id: this.userId,
-                    receiver_id: this.currentConversationId,
-                    content: `📎 ${data.file_name}`,
-                    file_url: data.file_url,
-                    status: 'sent',
-                    created_at: createdAt,
-                });
-                this.updateConversationLastMessage(this.currentConversationId, createdAt);
-                this.$nextTick(() => this.scrollToBottom());
+                // Single source of truth to prevent duplicates:
+                // when WS is connected, wait for WS echo and do not append locally.
+                if (!wsOpen) {
+                    if (!this.messages[this.currentConversationId]) this.messages[this.currentConversationId] = [];
+                    const existingIdx = this.messages[this.currentConversationId]
+                        .findIndex((m) => Number(m.id) === messageID);
+                    const createdAt = new Date().toISOString();
+                    const msg = {
+                        id: messageID,
+                        sender_id: this.userId,
+                        receiver_id: this.currentConversationId,
+                        content: `📎 ${data.file_name}`,
+                        file_name: data.file_name,
+                        file_url: data.file_url,
+                        file_content_type: data.file_content_type || file.type || '',
+                        status: 'sent',
+                        created_at: createdAt,
+                    };
+                    if (existingIdx >= 0) {
+                        this.messages[this.currentConversationId][existingIdx] = {
+                            ...this.messages[this.currentConversationId][existingIdx],
+                            ...msg,
+                        };
+                    } else {
+                        this.messages[this.currentConversationId].push(msg);
+                    }
+                    this.updateConversationLastMessage(this.currentConversationId, createdAt);
+                    this.$nextTick(() => this.scrollToBottom());
+                }
                 this.loadConversations();
             } catch (err) {
                 console.error('File upload error:', err);
                 alert('خطا در آپلود فایل');
             } finally {
                 this.uploadingFile = false;
-                event.target.value = ''; // Reset file input
             }
+        },
+        async handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file || !this.currentConversationId) return;
+            await this.sendFileMessage(file);
+            event.target.value = ''; // Reset file input
+        },
+        cleanupVoiceRecorder() {
+            if (this.recordingTimer) {
+                clearInterval(this.recordingTimer);
+                this.recordingTimer = null;
+            }
+            if (this.mediaRecorder) {
+                this.mediaRecorder.ondataavailable = null;
+                this.mediaRecorder.onstop = null;
+                this.mediaRecorder = null;
+            }
+            if (this.recordingStream) {
+                this.recordingStream.getTracks().forEach((track) => track.stop());
+                this.recordingStream = null;
+            }
+            this.recordedChunks = [];
+            this.recordingVoice = false;
+            this.recordingElapsedSec = 0;
+        },
+        async toggleVoiceRecording() {
+            if (!this.currentConversationId || this.uploadingFile || this.sendingVoice) return;
+            if (this.recordingVoice) {
+                this.stopVoiceRecordingAndSend();
+                return;
+            }
+            await this.startVoiceRecording();
+        },
+        async startVoiceRecording() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const preferredType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus'
+                    : (MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '');
+                const recorder = preferredType
+                    ? new MediaRecorder(stream, { mimeType: preferredType })
+                    : new MediaRecorder(stream);
+
+                this.recordedChunks = [];
+                this.recordingStream = stream;
+                this.mediaRecorder = recorder;
+                this.recordingVoice = true;
+                this.recordingElapsedSec = 0;
+
+                recorder.ondataavailable = (event) => {
+                    if (event.data && event.data.size > 0) {
+                        this.recordedChunks.push(event.data);
+                    }
+                };
+
+                recorder.onstop = async () => {
+                    const mimeType = recorder.mimeType || 'audio/webm';
+                    const blob = new Blob(this.recordedChunks, { type: mimeType });
+                    this.cleanupVoiceRecorder();
+
+                    if (blob.size === 0) return;
+                    this.sendingVoice = true;
+                    const extension = mimeType.includes('ogg')
+                        ? 'ogg'
+                        : (mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a' : 'webm');
+                    const file = new File([blob], `voice-${Date.now()}.${extension}`, { type: mimeType });
+                    await this.sendFileMessage(file);
+                    this.sendingVoice = false;
+                };
+
+                recorder.start(250);
+                this.recordingTimer = setInterval(() => {
+                    this.recordingElapsedSec += 1;
+                }, 1000);
+            } catch (err) {
+                console.error('Voice recording error:', err);
+                alert('دسترسی میکروفون لازم است');
+                this.cleanupVoiceRecorder();
+            }
+        },
+        stopVoiceRecordingAndSend() {
+            if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') return;
+            if (this.recordingTimer) {
+                clearInterval(this.recordingTimer);
+                this.recordingTimer = null;
+            }
+            this.recordingVoice = false;
+            this.mediaRecorder.stop();
         },
         scrollToBottom(attempts = 0) {
             const container = document.querySelector('.messages-container');
@@ -896,6 +1028,8 @@ const app = createApp({
             } else if (data.type === 'message') {
                 const convUser = data.sender_id === this.userId ? data.receiver_id : data.sender_id;
                 if (!this.messages[convUser]) this.messages[convUser] = [];
+                const incomingID = Number(data.message_id);
+                const existingByID = this.messages[convUser].findIndex((m) => Number(m.id) === incomingID);
 
                 // Replace temp message by client_message_id if present
                 if (data.client_message_id) {
@@ -907,6 +1041,15 @@ const app = createApp({
                             status: data.status,
                             file_name: data.file_name || this.messages[convUser][idx].file_name,
                             file_url: data.file_url || this.messages[convUser][idx].file_url,
+                            file_content_type: data.file_content_type || this.messages[convUser][idx].file_content_type,
+                        };
+                    } else if (existingByID >= 0) {
+                        this.messages[convUser][existingByID] = {
+                            ...this.messages[convUser][existingByID],
+                            status: data.status,
+                            file_name: data.file_name || this.messages[convUser][existingByID].file_name,
+                            file_url: data.file_url || this.messages[convUser][existingByID].file_url,
+                            file_content_type: data.file_content_type || this.messages[convUser][existingByID].file_content_type,
                         };
                     } else {
                         this.messages[convUser].push({
@@ -919,19 +1062,31 @@ const app = createApp({
                             client_message_id: data.client_message_id,
                             file_name: data.file_name,
                             file_url: data.file_url,
+                            file_content_type: data.file_content_type,
                         });
                     }
                 } else {
-                    this.messages[convUser].push({
-                        id: data.message_id,
-                        sender_id: data.sender_id,
-                        receiver_id: data.receiver_id,
-                        content: data.content,
-                        status: data.status,
-                        created_at: data.created_at,
-                        file_name: data.file_name,
-                        file_url: data.file_url,
-                    });
+                    if (existingByID >= 0) {
+                        this.messages[convUser][existingByID] = {
+                            ...this.messages[convUser][existingByID],
+                            status: data.status,
+                            file_name: data.file_name || this.messages[convUser][existingByID].file_name,
+                            file_url: data.file_url || this.messages[convUser][existingByID].file_url,
+                            file_content_type: data.file_content_type || this.messages[convUser][existingByID].file_content_type,
+                        };
+                    } else {
+                        this.messages[convUser].push({
+                            id: data.message_id,
+                            sender_id: data.sender_id,
+                            receiver_id: data.receiver_id,
+                            content: data.content,
+                            status: data.status,
+                            created_at: data.created_at,
+                            file_name: data.file_name,
+                            file_url: data.file_url,
+                            file_content_type: data.file_content_type,
+                        });
+                    }
                 }
 
                 // Update local conversation's last_message_at for immediate sorting

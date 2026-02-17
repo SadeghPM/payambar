@@ -41,6 +41,7 @@ type MessageEvent struct {
 	ReadAt      *time.Time             `json:"read_at,omitempty"`
 	FileName    string                 `json:"file_name,omitempty"`
 	FileURL     string                 `json:"file_url,omitempty"`
+	FileType    string                 `json:"file_content_type,omitempty"`
 	Payload     map[string]interface{} `json:"payload,omitempty"`
 }
 
@@ -72,7 +73,7 @@ func (h *Hub) IsUserOnline(userID int) bool {
 }
 
 // BroadcastMessage allows handlers to broadcast a message event to connected clients
-func (h *Hub) BroadcastMessage(messageID, senderID, receiverID int, content, status, fileName, fileURL string) {
+func (h *Hub) BroadcastMessage(messageID, senderID, receiverID int, content, status, fileName, fileURL, fileType string) {
 	msg := &MessageEvent{
 		Type:       "message",
 		MessageID:  messageID,
@@ -83,6 +84,7 @@ func (h *Hub) BroadcastMessage(messageID, senderID, receiverID int, content, sta
 		CreatedAt:  time.Now(),
 		FileName:   fileName,
 		FileURL:    fileURL,
+		FileType:   fileType,
 	}
 	h.broadcast <- msg
 }

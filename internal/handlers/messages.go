@@ -20,7 +20,7 @@ type OnlineChecker interface {
 
 // MessageBroadcaster interface for broadcasting messages via WebSocket
 type MessageBroadcaster interface {
-	BroadcastMessage(messageID, senderID, receiverID int, content, status, fileName, fileURL string)
+	BroadcastMessage(messageID, senderID, receiverID int, content, status, fileName, fileURL, fileType string)
 }
 
 type MessageHandler struct {
@@ -148,7 +148,7 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 	// Get messages between the two users with file attachments in single query (fixes N+1)
 	rows, err := h.db.Query(`
 		SELECT m.id, m.sender_id, m.receiver_id, m.content, m.status, m.created_at, m.delivered_at, m.read_at,
-		       f.file_name, f.file_path
+		       f.file_name, f.file_path, f.content_type
 		FROM messages m
 		LEFT JOIN files f ON f.message_id = m.id
 		WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)
@@ -165,8 +165,8 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 	var messages []*models.Message
 	for rows.Next() {
 		msg := &models.Message{}
-		var fileName, filePath sql.NullString
-		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Content, &msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.ReadAt, &fileName, &filePath); err != nil {
+		var fileName, filePath, fileType sql.NullString
+		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Content, &msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.ReadAt, &fileName, &filePath, &fileType); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to scan message")})
 			return
 		}
@@ -175,6 +175,9 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 			msg.FileName = &fileName.String
 			fileURL := "/api/files/" + filepath.Base(filePath.String)
 			msg.FileURL = &fileURL
+			if fileType.Valid {
+				msg.FileType = &fileType.String
+			}
 		}
 		messages = append(messages, msg)
 	}
@@ -876,14 +879,16 @@ func (h *MessageHandler) UploadFile(c *gin.Context) {
 			"sent",
 			header.Filename,
 			fileURL,
+			header.Header.Get("Content-Type"),
 		)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message_id": messageID,
-		"file_name":  header.Filename,
-		"file_size":  header.Size,
-		"file_url":   fileURL,
+		"message_id":        messageID,
+		"file_name":         header.Filename,
+		"file_size":         header.Size,
+		"file_url":          fileURL,
+		"file_content_type": header.Header.Get("Content-Type"),
 	})
 }
 

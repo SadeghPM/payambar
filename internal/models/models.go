@@ -21,6 +21,7 @@ type Message struct {
 	ReadAt      *time.Time `json:"read_at,omitempty"`
 	FileName    *string    `json:"file_name,omitempty"`
 	FileURL     *string    `json:"file_url,omitempty"`
+	FileType    *string    `json:"file_content_type,omitempty"`
 }
 
 type File struct {

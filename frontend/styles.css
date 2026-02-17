@@ -1051,6 +1051,31 @@ button {
     border-color: var(--auth-accent);
 }
 
+.input-container .icon-btn.recording {
+    background: #ffe6e8;
+    border-color: #f3b3ba;
+    color: #b4232f;
+}
+
+.recording-indicator {
+    margin-top: 0.4rem;
+    font-size: 0.85rem;
+    color: #b4232f;
+    text-align: center;
+}
+
+.voice-message {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: min(270px, 70vw);
+}
+
+.voice-message audio {
+    width: 100%;
+    height: 34px;
+}
+
 /* Modal Styles */
 .modal {
     position: fixed;
