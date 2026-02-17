@@ -105,6 +105,13 @@ generate_jwt_secret() {
   fi
 }
 
+is_elf_binary() {
+  local file_path="$1"
+  local magic
+  magic=$(od -An -t x1 -N4 "${file_path}" 2>/dev/null | tr -d '[:space:]')
+  [ "${magic}" = "7f454c46" ]
+}
+
 fetch_latest_asset_url() {
   local url
   url=$(TARGET_OS="${TARGET_OS}" TARGET_ARCH="${TARGET_ARCH}" curl -fsSL \
@@ -169,10 +176,33 @@ download_and_extract() {
       ;;
   esac
 
-  local bin_path
-  bin_path=$(find "${workdir}" -maxdepth 3 -type f -name "payambar*" | head -n 1)
+  local bin_path=""
+  local candidates
+
+  candidates=$(find "${workdir}" -maxdepth 5 -type f \( \
+    -name "payambar-${TARGET_OS}-${TARGET_ARCH}" -o \
+    -name "payambar" -o \
+    -name "payambar*" \
+  \) | sort)
+
+  while IFS= read -r candidate; do
+    [ -n "${candidate}" ] || continue
+    case "${candidate}" in
+      *.txt|*.md|*.sha256|*.sha512|*.sum|*.asc|*.sig)
+        continue
+        ;;
+    esac
+    if is_elf_binary "${candidate}"; then
+      bin_path="${candidate}"
+      break
+    fi
+  done <<EOF
+${candidates}
+EOF
+
   if [ -z "${bin_path}" ]; then
     echo "[error] Unable to locate payambar binary in downloaded asset." >&2
+    echo "[error] Found files were not valid Linux ELF binaries for ${TARGET_OS}/${TARGET_ARCH}." >&2
     exit 1
   fi
   chmod +x "${bin_path}"
