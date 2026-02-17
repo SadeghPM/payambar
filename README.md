@@ -16,16 +16,21 @@ A lean 1-to-1 messenger built in Go with embedded frontend, WebSocket real-time 
 
 ## Deployment Options
 
-### 1) Ubuntu one-line installer (systemd, latest GitHub release)
-Requirements: Ubuntu 20.04+, `curl`, `python3`, `tar`, (`unzip` if the release is a zip), `systemd`.
+### 1) Linux installer (systemd, latest GitHub release)
+Requirements: Debian/Ubuntu (systemd), `curl`, `python3`, `tar`, (`unzip` if the release is a zip), `systemd`.
+Supported release targets: `linux-amd64`, `linux-arm64`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/4xmen/payambar/main/install.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/4xmen/payambar/main/install.sh | sudo bash -s -- --install
+```
+Upgrade to the latest release:
+```bash
+curl -fsSL https://raw.githubusercontent.com/4xmen/payambar/main/install.sh | sudo bash -s -- --update
 ```
 What it does:
 - Fetches the latest release asset from GitHub and installs the `payambar` binary to `/opt/payambar`.
 - Creates system user `payambar`, data dir `/var/lib/payambar` (uploads at `/var/lib/payambar/uploads`), env file `/etc/payambar/payambar.env`.
-- Seeds an empty SQLite DB file, installs a systemd unit, enables & starts the service.
+- Seeds an empty SQLite DB file, installs a systemd unit, enables the service, and starts/restarts it.
 - Default port: `8080`. Change `PORT` or `JWT_SECRET` in `/etc/payambar/payambar.env` then `sudo systemctl restart payambar`.
 
 Common commands:
@@ -76,7 +81,7 @@ cmd/payambar/         # Main entrypoint (embeds static assets)
 frontend/             # PWA source
 bin/                  # Built binaries (make build-all)
 data/                 # Local dev data (SQLite/uploads)
-install.sh            # Ubuntu installer (systemd)
+install.sh            # Linux installer (systemd)
 docker-compose.yml    # Container deployment
 ```
 ## Service Management (installer)
