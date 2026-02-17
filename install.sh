@@ -114,10 +114,10 @@ is_elf_binary() {
 
 fetch_latest_asset_url() {
   local url
-  url=$(TARGET_OS="${TARGET_OS}" TARGET_ARCH="${TARGET_ARCH}" curl -fsSL \
+  url=$(curl -fsSL \
     -H "Accept: application/vnd.github+json" \
     -H "User-Agent: ${SERVICE_NAME}-installer" \
-    "https://api.github.com/repos/${REPO}/releases/latest" | python3 -c '
+    "https://api.github.com/repos/${REPO}/releases/latest" | TARGET_OS="${TARGET_OS}" TARGET_ARCH="${TARGET_ARCH}" python3 -c '
 import json
 import re
 import sys
