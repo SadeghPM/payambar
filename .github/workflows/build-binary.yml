@@ -3,7 +3,6 @@ name: Build Binaries
 on:
   push:
     branches: [ "**" ]
-    tags: [ "*" ]
   pull_request:
     branches: [ "**" ]
   release:
@@ -92,7 +91,7 @@ jobs:
   release:
     name: Publish Release Assets
     needs: build
-    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     concurrency:
       group: release-assets-${{ github.event.release.tag_name || github.ref_name }}
