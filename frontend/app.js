@@ -289,6 +289,17 @@ const app = createApp({
             if (msg.status === 'delivered') return '✓';
             return '';
         },
+        shouldShowMessageStatus(msg, index) {
+            if (!msg) return false;
+            if (Number(msg.sender_id) !== Number(this.userId)) return false;
+            const list = this.messagesForCurrent || [];
+            for (let i = list.length - 1; i >= 0; i--) {
+                if (Number(list[i]?.sender_id) === Number(this.userId)) {
+                    return i === index;
+                }
+            }
+            return false;
+        },
         formatRecordingDuration(seconds) {
             const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
             const secs = (seconds % 60).toString().padStart(2, '0');
@@ -296,9 +307,10 @@ const app = createApp({
         },
         isAudioMessage(msg) {
             if (!msg || !msg.file_url) return false;
+            const fileName = this.getMessageFileName(msg);
+            if (fileName.startsWith('voice-')) return true;
             const contentType = typeof msg.file_content_type === 'string' ? msg.file_content_type.toLowerCase() : '';
             if (contentType.startsWith('audio/')) return true;
-            const fileName = (msg.file_name || '').toLowerCase();
             return (
                 fileName.endsWith('.webm') ||
                 fileName.endsWith('.ogg') ||
@@ -306,6 +318,45 @@ const app = createApp({
                 fileName.endsWith('.wav') ||
                 fileName.endsWith('.m4a')
             );
+        },
+        isImageMessage(msg) {
+            if (!msg || !msg.file_url) return false;
+            const contentType = typeof msg.file_content_type === 'string' ? msg.file_content_type.toLowerCase() : '';
+            if (contentType.startsWith('image/')) return true;
+            const fileName = this.getMessageFileName(msg);
+            return (
+                fileName.endsWith('.jpg') ||
+                fileName.endsWith('.jpeg') ||
+                fileName.endsWith('.png') ||
+                fileName.endsWith('.gif') ||
+                fileName.endsWith('.webp') ||
+                fileName.endsWith('.bmp') ||
+                fileName.endsWith('.svg')
+            );
+        },
+        isVideoMessage(msg) {
+            if (!msg || !msg.file_url) return false;
+            if (this.isAudioMessage(msg)) return false;
+            const contentType = typeof msg.file_content_type === 'string' ? msg.file_content_type.toLowerCase() : '';
+            if (contentType.startsWith('video/')) return true;
+            const fileName = this.getMessageFileName(msg);
+            return (
+                fileName.endsWith('.mp4') ||
+                fileName.endsWith('.webm') ||
+                fileName.endsWith('.mov') ||
+                fileName.endsWith('.mkv') ||
+                fileName.endsWith('.m4v')
+            );
+        },
+        getMessageFileName(msg) {
+            const fromName = (msg?.file_name || '').toLowerCase();
+            if (fromName) return fromName;
+            try {
+                const url = String(msg?.file_url || '').split('?')[0];
+                return url.toLowerCase();
+            } catch (e) {
+                return '';
+            }
         },
         getPullBottomAllowance(el) {
             if (!el) return 12;

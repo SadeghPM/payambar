@@ -164,10 +164,24 @@
                     <div v-else>
                         <div v-if="loadingOlderMessages" class="loading-older">در حال بارگذاری پیام‌های قدیمی‌تر...</div>
                         <div v-if="hasMoreMessages[currentConversationId] && !loadingOlderMessages" class="load-more-hint">برای بارگذاری پیام‌های قدیمی‌تر به بالا اسکرول کنید</div>
-                        <div v-for="msg in messagesForCurrent" :key="msg.id || msg.client_message_id" class="message" :class="Number(msg.sender_id) === Number(userId) ? 'sent' : 'received'">
+                        <div v-for="(msg, msgIndex) in messagesForCurrent" :key="msg.id || msg.client_message_id" class="message" :class="Number(msg.sender_id) === Number(userId) ? 'sent' : 'received'">
                             <div class="message-bubble">
                                 <template v-if="msg.file_url">
-                                    <template v-if="isAudioMessage(msg)">
+                                    <template v-if="isImageMessage(msg)">
+                                        <div class="media-message image-message">
+                                            <a :href="msg.file_url" target="_blank" class="message-image-link">
+                                                <img :src="msg.file_url" class="message-image" :alt="msg.file_name || 'image'">
+                                            </a>
+                                            <a :href="msg.file_url" target="_blank" class="media-download" :download="msg.file_name || true" title="دانلود تصویر" aria-label="دانلود تصویر">⤓</a>
+                                        </div>
+                                    </template>
+                                    <template v-else-if="isVideoMessage(msg)">
+                                        <div class="media-message video-message">
+                                            <video :src="msg.file_url" class="message-video" controls preload="metadata"></video>
+                                            <a :href="msg.file_url" target="_blank" class="media-download" :download="msg.file_name || true" title="دانلود ویدیو" aria-label="دانلود ویدیو">⤓</a>
+                                        </div>
+                                    </template>
+                                    <template v-else-if="isAudioMessage(msg)">
                                         <div class="voice-message">
                                             <audio :src="msg.file_url" controls preload="metadata"></audio>
                                         </div>
@@ -183,7 +197,7 @@
                             <div class="message-footer">
                                 <div class="message-meta">
                                     <span class="message-time">{{ formatTime(msg.created_at) }}</span>
-                                    <span class="message-status">{{ formatStatus(msg) }}</span>
+                                    <span v-if="shouldShowMessageStatus(msg, msgIndex)" class="message-status">{{ formatStatus(msg) }}</span>
                                 </div>
                                 <button 
                                     v-if="Number(msg.sender_id) === Number(userId)" 
