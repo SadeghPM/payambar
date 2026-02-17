@@ -951,32 +951,69 @@ createApp({
                     if (users.length === 0) {
                         usersList.innerHTML = '<p class="empty">کاربری یافت نشد</p>';
                     } else {
-                        usersList.innerHTML = users.map(u => `
-                            <div class="user-item" data-id="${u.id}" data-username="${u.username}" data-display-name="${u.display_name || ''}" data-avatar="${u.avatar_url || ''}" data-online="${u.is_online || false}">
-                                <div class="user-avatar-wrapper">
-                                    ${u.avatar_url
-                                ? `<img src="${u.avatar_url}" class="user-avatar" alt="avatar">`
-                                : `<span class="user-avatar-placeholder">${(u.display_name || u.username || '?').charAt(0).toUpperCase()}</span>`
+                        usersList.innerHTML = '';
+                        users.forEach((u) => {
+                            const userId = Number(u.id);
+                            const username = typeof u.username === 'string' ? u.username : '';
+                            const displayName = typeof u.display_name === 'string' ? u.display_name : '';
+                            const avatarUrl = typeof u.avatar_url === 'string' ? u.avatar_url : '';
+                            const isOnline = !!u.is_online;
+                            const nameLabel = displayName || username || '?';
+
+                            const item = document.createElement('div');
+                            item.className = 'user-item';
+
+                            const avatarWrapper = document.createElement('div');
+                            avatarWrapper.className = 'user-avatar-wrapper';
+                            if (avatarUrl) {
+                                const img = document.createElement('img');
+                                img.src = avatarUrl;
+                                img.className = 'user-avatar';
+                                img.alt = 'avatar';
+                                avatarWrapper.appendChild(img);
+                            } else {
+                                const placeholder = document.createElement('span');
+                                placeholder.className = 'user-avatar-placeholder';
+                                placeholder.textContent = nameLabel.charAt(0).toUpperCase();
+                                avatarWrapper.appendChild(placeholder);
                             }
-                                    ${u.is_online ? '<span class="online-indicator"></span>' : ''}
-                                </div>
-                                <div class="user-info">
-                                    <div class="user-display-name">${u.display_name || u.username}</div>
-                                    <div class="user-username">@${u.username}${u.is_online ? ' <span class="online-text">آنلاین</span>' : ''}</div>
-                                </div>
-                                <span class="chevron">›</span>
-                            </div>
-                        `).join('');
-                        usersList.querySelectorAll('.user-item').forEach((el) => {
-                            el.addEventListener('click', () => {
-                                const id = parseInt(el.getAttribute('data-id'));
-                                const username = el.getAttribute('data-username');
-                                const displayName = el.getAttribute('data-display-name');
-                                const avatarUrl = el.getAttribute('data-avatar');
-                                const isOnline = el.getAttribute('data-online') === 'true';
-                                this.startConversation(id, username, displayName, avatarUrl, isOnline);
+                            if (isOnline) {
+                                const onlineIndicator = document.createElement('span');
+                                onlineIndicator.className = 'online-indicator';
+                                avatarWrapper.appendChild(onlineIndicator);
+                            }
+
+                            const info = document.createElement('div');
+                            info.className = 'user-info';
+                            const displayNameEl = document.createElement('div');
+                            displayNameEl.className = 'user-display-name';
+                            displayNameEl.textContent = nameLabel;
+                            const usernameEl = document.createElement('div');
+                            usernameEl.className = 'user-username';
+                            usernameEl.textContent = `@${username}`;
+                            if (isOnline) {
+                                const onlineText = document.createElement('span');
+                                onlineText.className = 'online-text';
+                                onlineText.textContent = ' آنلاین';
+                                usernameEl.appendChild(onlineText);
+                            }
+                            info.appendChild(displayNameEl);
+                            info.appendChild(usernameEl);
+
+                            const chevron = document.createElement('span');
+                            chevron.className = 'chevron';
+                            chevron.textContent = '›';
+
+                            item.appendChild(avatarWrapper);
+                            item.appendChild(info);
+                            item.appendChild(chevron);
+
+                            item.addEventListener('click', () => {
+                                this.startConversation(userId, username, displayName, avatarUrl, isOnline);
                                 modal.remove();
                             });
+
+                            usersList.appendChild(item);
                         });
                     }
                 } catch (err) {
