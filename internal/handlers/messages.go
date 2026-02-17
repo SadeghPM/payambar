@@ -13,6 +13,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func parseSQLiteTimestamp(value string) (time.Time, bool) {
+	if strings.TrimSpace(value) == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{
+		time.RFC3339Nano,
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04:05.999999999",
+	}
+	for _, layout := range layouts {
+		if t, err := time.Parse(layout, value); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
 // OnlineChecker interface for checking user online status
 type OnlineChecker interface {
 	IsUserOnline(userID int) bool
@@ -297,11 +315,11 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 			continue
 		}
 
-		var lastMessageAt sql.NullTime
+		var lastMessageAt sql.NullString
 		var unreadCount int
 
 		h.db.QueryRow(`
-			SELECT MAX(created_at) FROM messages
+			SELECT COALESCE(MAX(created_at), '') FROM messages
 			WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
 		`, currentUserID, cd.otherUserID, cd.otherUserID, currentUserID).Scan(&lastMessageAt)
 
@@ -336,7 +354,9 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 			conv.AvatarURL = &userInfo.avatarURL.String
 		}
 		if lastMessageAt.Valid {
-			conv.LastMessageAt = lastMessageAt.Time
+			if parsed, ok := parseSQLiteTimestamp(lastMessageAt.String); ok {
+				conv.LastMessageAt = parsed
+			}
 		}
 
 		conversations = append(conversations, conv)
