@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/4xmen/payambar/internal/models"
+	"github.com/gin-gonic/gin"
 )
 
 // OnlineChecker interface for checking user online status
@@ -174,7 +174,7 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 		// Set file attachment if present
 		if fileName.Valid {
 			msg.FileName = &fileName.String
-			fileURL := "/api/files/" + strings.TrimPrefix(filePath.String, "./data/uploads/")
+			fileURL := "/api/files/" + filepath.Base(filePath.String)
 			msg.FileURL = &fileURL
 		}
 		messages = append(messages, msg)
@@ -847,7 +847,7 @@ func (h *MessageHandler) UploadFile(c *gin.Context) {
 	// filepath.Base() strips any directory components from the filename
 	safeFilename := filepath.Base(header.Filename)
 	filename := strconv.FormatInt(time.Now().UnixNano(), 10) + "_" + safeFilename
-	uploadPath := "./data/uploads/" + filename
+	uploadPath := filepath.Join(h.uploadDir, filename)
 
 	// Save file
 	if err := c.SaveUploadedFile(header, uploadPath); err != nil {
@@ -953,7 +953,7 @@ func (h *MessageHandler) UploadAvatar(c *gin.Context) {
 		ext = "." + parts[len(parts)-1]
 	}
 	filename := "avatar_" + strconv.Itoa(userID.(int)) + "_" + strconv.FormatInt(time.Now().UnixNano(), 10) + ext
-	uploadPath := "./data/uploads/" + filename
+	uploadPath := filepath.Join(h.uploadDir, filename)
 
 	// Save file
 	if err := c.SaveUploadedFile(header, uploadPath); err != nil {

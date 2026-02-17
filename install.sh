@@ -33,22 +33,28 @@ generate_jwt_secret() {
 
 fetch_latest_asset_url() {
   local url
-  url=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | python3 - <<'PY'
-import json, re, sys
+  url=$(curl -fsSL \
+    -H "Accept: application/vnd.github+json" \
+    -H "User-Agent: ${SERVICE_NAME}-installer" \
+    "https://api.github.com/repos/${REPO}/releases/latest" | python3 -c '
+import json
+import re
+import sys
+
 data = json.load(sys.stdin)
 assets = data.get("assets") or []
 patterns = [r"linux.*amd64", r"linux.*x86_64", r"linux.*64", r"linux", r"amd64", r"x86_64"]
 for pat in patterns:
-    for a in assets:
-        name = a.get("name", "")
+    for asset in assets:
+        name = asset.get("name", "")
         if re.search(pat, name, re.IGNORECASE):
-            print(a.get("browser_download_url", ""))
+            print(asset.get("browser_download_url", ""))
             sys.exit(0)
 if assets:
     print(assets[0].get("browser_download_url", ""))
     sys.exit(0)
 sys.exit(1)
-PY
+'
   ) || true
 
   if [ -z "${url}" ]; then
@@ -65,10 +71,10 @@ download_and_extract() {
   workdir=$(mktemp -d)
   local archive="${workdir}/release.bin"
 
-  echo "[info] Downloading ${asset_url}"
+  echo "[info] Downloading ${asset_url}" >&2
   curl -fL "${asset_url}" -o "${archive}"
 
-  echo "[info] Extracting archive"
+  echo "[info] Extracting archive" >&2
   case "${asset_url}" in
     *.tar.gz|*.tgz)
       tar -xzf "${archive}" -C "${workdir}"

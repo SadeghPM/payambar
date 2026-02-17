@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -9,16 +10,17 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
 	"github.com/4xmen/payambar/internal/auth"
 	"github.com/4xmen/payambar/internal/db"
 	"github.com/4xmen/payambar/internal/handlers"
 	"github.com/4xmen/payambar/internal/ws"
 	"github.com/4xmen/payambar/pkg/config"
+	"github.com/gin-gonic/gin"
 	"github.com/ulule/limiter/v3"
 	"github.com/ulule/limiter/v3/drivers/store/memory"
 )
@@ -47,6 +49,58 @@ func rateLimitMiddleware(limiterInstance *limiter.Limiter) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+type responseBodyWriter struct {
+	gin.ResponseWriter
+	body *bytes.Buffer
+}
+
+func (w responseBodyWriter) Write(b []byte) (int, error) {
+	w.body.Write(b)
+	return w.ResponseWriter.Write(b)
+}
+
+func (w responseBodyWriter) WriteString(s string) (int, error) {
+	w.body.WriteString(s)
+	return w.ResponseWriter.WriteString(s)
+}
+
+func serverErrorLogger() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		blw := &responseBodyWriter{body: bytes.NewBuffer(nil), ResponseWriter: c.Writer}
+		c.Writer = blw
+
+		c.Next()
+
+		if c.Writer.Status() >= http.StatusInternalServerError {
+			log.Printf(
+				"HTTP %d %s %s ip=%s duration=%s errors=%q response=%q",
+				c.Writer.Status(),
+				c.Request.Method,
+				c.Request.URL.Path,
+				c.ClientIP(),
+				time.Since(start).Truncate(time.Millisecond),
+				c.Errors.ByType(gin.ErrorTypeAny).String(),
+				strings.TrimSpace(blw.body.String()),
+			)
+		}
+	}
+}
+
+func panicRecovery() gin.HandlerFunc {
+	return gin.CustomRecovery(func(c *gin.Context, recovered interface{}) {
+		log.Printf(
+			"panic recovered method=%s path=%s ip=%s error=%v\n%s",
+			c.Request.Method,
+			c.Request.URL.Path,
+			c.ClientIP(),
+			recovered,
+			debug.Stack(),
+		)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+	})
 }
 
 func main() {
@@ -80,7 +134,10 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	router := gin.Default()
+	router := gin.New()
+	router.Use(serverErrorLogger())
+	router.Use(gin.Logger())
+	router.Use(panicRecovery())
 	router.MaxMultipartMemory = cfg.MaxUploadSize
 
 	// CORS middleware
@@ -137,8 +194,8 @@ func main() {
 		protected.GET("/webrtc/config", msgHandler.GetWebRTCConfig)
 	}
 
-	// Serve uploaded files
-	router.Static("/api/files", "./data/uploads")
+	// Serve uploaded files from configured storage path
+	router.Static("/api/files", cfg.FileStoragePath)
 
 	// WebSocket endpoint
 	router.GET("/ws", authHandler.AuthMiddleware(), hub.HandleWebSocket)
