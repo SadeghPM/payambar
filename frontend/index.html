@@ -216,6 +216,39 @@
                 </div>
             </div>
 
+            <!-- New Chat Modal -->
+            <div class="modal" v-if="showNewChatModal" @click.self="closeNewChatModal">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3>مکالمه جدید</h3>
+                        <button class="close-btn" @click="closeNewChatModal" aria-label="بستن">✕</button>
+                    </div>
+                    <div class="search-user-container">
+                        <input
+                            type="text"
+                            ref="newChatSearchInput"
+                            class="search-user-input"
+                            v-model="newChatSearchQuery"
+                            @input="onNewChatSearchInput"
+                            placeholder="نام کاربری را جستجو کنید..."
+                        >
+                    </div>
+                    <div class="users-list">
+                        <p v-if="!newChatSearchQuery.trim()" class="search-hint">نام کاربری را وارد کنید</p>
+                        <p v-else-if="newChatSearchLoading" class="searching">در حال جستجو...</p>
+                        <p v-else-if="newChatSearchError" class="empty">{{ newChatSearchError }}</p>
+                        <p v-else-if="newChatSearchResults.length === 0" class="empty">کاربری یافت نشد</p>
+                        <user-search-item
+                            v-else
+                            v-for="user in newChatSearchResults"
+                            :key="user.id"
+                            :user="user"
+                            @select="handleSelectSearchedUser"
+                        ></user-search-item>
+                    </div>
+                </div>
+            </div>
+
             <!-- Profile Modal -->
             <div class="modal" v-if="showProfileModal" @click.self="showProfileModal = false">
                 <div class="modal-content">

@@ -71,17 +71,6 @@ func (h *Hub) IsUserOnline(userID int) bool {
 	return ok
 }
 
-// GetOnlineUserIDs returns a slice of all online user IDs
-func (h *Hub) GetOnlineUserIDs() []int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	ids := make([]int, 0, len(h.clients))
-	for id := range h.clients {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
 // BroadcastMessage allows handlers to broadcast a message event to connected clients
 func (h *Hub) BroadcastMessage(messageID, senderID, receiverID int, content, status, fileName, fileURL string) {
 	msg := &MessageEvent{

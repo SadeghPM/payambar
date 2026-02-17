@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"regexp"
@@ -165,10 +164,4 @@ func (s *Service) UserExists(userID int) (bool, error) {
 		return false, fmt.Errorf("failed to query user: %w", err)
 	}
 	return exists, nil
-}
-
-// HashToken creates a hash of the token for display purposes (first few chars visible)
-func HashToken(token string) string {
-	hash := sha256.Sum256([]byte(token))
-	return fmt.Sprintf("%x", hash)
 }

@@ -16,7 +16,6 @@ import (
 // OnlineChecker interface for checking user online status
 type OnlineChecker interface {
 	IsUserOnline(userID int) bool
-	GetOnlineUserIDs() []int
 }
 
 // MessageBroadcaster interface for broadcasting messages via WebSocket

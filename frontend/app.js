@@ -7,8 +7,58 @@ const WS_URL = (typeof window !== 'undefined' && window.WS_URL)
     : (window.location.origin.replace(/^http/, 'ws') + '/ws');
 
 const { createApp } = Vue;
+const NEW_CHAT_SEARCH_DEBOUNCE_MS = 300;
 
-createApp({
+const UserSearchItem = {
+    props: {
+        user: {
+            type: Object,
+            required: true,
+        },
+    },
+    emits: ['select'],
+    computed: {
+        normalizedUser() {
+            const userId = Number(this.user?.id);
+            const username = typeof this.user?.username === 'string' ? this.user.username : '';
+            const displayName = typeof this.user?.display_name === 'string' ? this.user.display_name : '';
+            const avatarUrl = typeof this.user?.avatar_url === 'string' ? this.user.avatar_url : '';
+            const isOnline = !!this.user?.is_online;
+            return {
+                id: userId,
+                username,
+                displayName,
+                avatarUrl,
+                isOnline,
+                nameLabel: displayName || username || '?',
+            };
+        },
+    },
+    methods: {
+        selectUser() {
+            this.$emit('select', this.normalizedUser);
+        },
+    },
+    template: `
+        <div class="user-item" @click="selectUser">
+            <div class="user-avatar-wrapper">
+                <img v-if="normalizedUser.avatarUrl" :src="normalizedUser.avatarUrl" class="user-avatar" alt="avatar">
+                <span v-else class="user-avatar-placeholder">{{ normalizedUser.nameLabel.charAt(0).toUpperCase() }}</span>
+                <span v-if="normalizedUser.isOnline" class="online-indicator"></span>
+            </div>
+            <div class="user-info">
+                <div class="user-display-name">{{ normalizedUser.nameLabel }}</div>
+                <div class="user-username">
+                    @{{ normalizedUser.username }}
+                    <span v-if="normalizedUser.isOnline" class="online-text"> آنلاین</span>
+                </div>
+            </div>
+            <span class="chevron">›</span>
+        </div>
+    `,
+};
+
+const app = createApp({
     data() {
         return {
             token: null,
@@ -37,6 +87,12 @@ createApp({
             loadingConversations: false,
             hasMoreMessages: {},
             uploadingFile: false,
+            showNewChatModal: false,
+            newChatSearchQuery: '',
+            newChatSearchResults: [],
+            newChatSearchLoading: false,
+            newChatSearchError: '',
+            newChatSearchTimeout: null,
             showProfileModal: false,
             profileDisplayName: '',
             myAvatarUrl: null,
@@ -318,8 +374,17 @@ createApp({
             this.myAvatarUrl = null;
             this.deleteAccountConfirm = '';
             this.deletingAccount = false;
+            this.showNewChatModal = false;
+            this.newChatSearchQuery = '';
+            this.newChatSearchResults = [];
+            this.newChatSearchLoading = false;
+            this.newChatSearchError = '';
             this.conversationMenu = { show: false, x: 0, y: 0, conversation: null };
             this.serverOffline = false;
+            if (this.newChatSearchTimeout) {
+                clearTimeout(this.newChatSearchTimeout);
+                this.newChatSearchTimeout = null;
+            }
             localStorage.clear();
             if (this.ws) {
                 try { this.ws.close(); } catch (e) { }
@@ -750,19 +815,6 @@ createApp({
                 console.error('Error refreshing conversation:', err);
             }
         },
-        shareProfile() {
-            const profileUrl = `${window.location.origin}/u/${this.username}`;
-            const text = `پروفایل من: ${profileUrl}`;
-            if (navigator.share) {
-                navigator.share({ title: 'پروفایل من', text, url: profileUrl });
-            } else {
-                navigator.clipboard.writeText(profileUrl).then(() => alert('لینک پروفایل کپی شد'));
-            }
-        },
-        toggleChatList(forceState) {
-            if (typeof forceState === 'boolean') this.chatListOpen = forceState;
-            else this.chatListOpen = !this.chatListOpen;
-        },
         goBackToList() {
             this.closeConversation();
         },
@@ -911,127 +963,72 @@ createApp({
             }
         },
         openNewChat() {
-            this.showNewChatModal();
-        },
-        showNewChatModal() {
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3>مکالمه جدید</h3>
-                        <button class="close-btn" aria-label="بستن">✕</button>
-                    </div>
-                    <div class="search-user-container">
-                        <input type="text" class="search-user-input" placeholder="نام کاربری را جستجو کنید..." autofocus>
-                    </div>
-                    <div class="users-list"></div>
-                </div>`;
-
-            const closeBtn = modal.querySelector('.close-btn');
-            const searchInput = modal.querySelector('.search-user-input');
-            const usersList = modal.querySelector('.users-list');
-            let searchTimeout = null;
-
-            closeBtn.addEventListener('click', () => modal.remove());
-            modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-
-            const searchUsers = async (query) => {
-                if (!query.trim()) {
-                    usersList.innerHTML = '<p class="search-hint">نام کاربری را وارد کنید</p>';
-                    return;
+            this.showNewChatModal = true;
+            this.newChatSearchQuery = '';
+            this.newChatSearchResults = [];
+            this.newChatSearchError = '';
+            this.newChatSearchLoading = false;
+            this.$nextTick(() => {
+                const input = this.$refs.newChatSearchInput;
+                if (input && typeof input.focus === 'function') {
+                    input.focus();
                 }
-                usersList.innerHTML = '<p class="searching">در حال جستجو...</p>';
-                try {
-                    const res = await fetch(`${API_URL}/users?q=${encodeURIComponent(query)}`, {
-                        headers: { Authorization: `Bearer ${this.token}` }
-                    });
-                    if (!res.ok) throw new Error('Search failed');
-                    const users = await res.json();
-                    if (users.length === 0) {
-                        usersList.innerHTML = '<p class="empty">کاربری یافت نشد</p>';
-                    } else {
-                        usersList.innerHTML = '';
-                        users.forEach((u) => {
-                            const userId = Number(u.id);
-                            const username = typeof u.username === 'string' ? u.username : '';
-                            const displayName = typeof u.display_name === 'string' ? u.display_name : '';
-                            const avatarUrl = typeof u.avatar_url === 'string' ? u.avatar_url : '';
-                            const isOnline = !!u.is_online;
-                            const nameLabel = displayName || username || '?';
-
-                            const item = document.createElement('div');
-                            item.className = 'user-item';
-
-                            const avatarWrapper = document.createElement('div');
-                            avatarWrapper.className = 'user-avatar-wrapper';
-                            if (avatarUrl) {
-                                const img = document.createElement('img');
-                                img.src = avatarUrl;
-                                img.className = 'user-avatar';
-                                img.alt = 'avatar';
-                                avatarWrapper.appendChild(img);
-                            } else {
-                                const placeholder = document.createElement('span');
-                                placeholder.className = 'user-avatar-placeholder';
-                                placeholder.textContent = nameLabel.charAt(0).toUpperCase();
-                                avatarWrapper.appendChild(placeholder);
-                            }
-                            if (isOnline) {
-                                const onlineIndicator = document.createElement('span');
-                                onlineIndicator.className = 'online-indicator';
-                                avatarWrapper.appendChild(onlineIndicator);
-                            }
-
-                            const info = document.createElement('div');
-                            info.className = 'user-info';
-                            const displayNameEl = document.createElement('div');
-                            displayNameEl.className = 'user-display-name';
-                            displayNameEl.textContent = nameLabel;
-                            const usernameEl = document.createElement('div');
-                            usernameEl.className = 'user-username';
-                            usernameEl.textContent = `@${username}`;
-                            if (isOnline) {
-                                const onlineText = document.createElement('span');
-                                onlineText.className = 'online-text';
-                                onlineText.textContent = ' آنلاین';
-                                usernameEl.appendChild(onlineText);
-                            }
-                            info.appendChild(displayNameEl);
-                            info.appendChild(usernameEl);
-
-                            const chevron = document.createElement('span');
-                            chevron.className = 'chevron';
-                            chevron.textContent = '›';
-
-                            item.appendChild(avatarWrapper);
-                            item.appendChild(info);
-                            item.appendChild(chevron);
-
-                            item.addEventListener('click', () => {
-                                this.startConversation(userId, username, displayName, avatarUrl, isOnline);
-                                modal.remove();
-                            });
-
-                            usersList.appendChild(item);
-                        });
-                    }
-                } catch (err) {
-                    console.error('Search error:', err);
-                    usersList.innerHTML = '<p class="empty">خطا در جستجو</p>';
-                }
-            };
-
-            searchInput.addEventListener('input', (e) => {
-                clearTimeout(searchTimeout);
-                searchTimeout = setTimeout(() => searchUsers(e.target.value), 300);
             });
-
-            // Show initial hint
-            usersList.innerHTML = '<p class="search-hint">نام کاربری را وارد کنید</p>';
-
-            document.body.appendChild(modal);
-            searchInput.focus();
+        },
+        closeNewChatModal() {
+            this.showNewChatModal = false;
+            this.newChatSearchQuery = '';
+            this.newChatSearchResults = [];
+            this.newChatSearchError = '';
+            this.newChatSearchLoading = false;
+            if (this.newChatSearchTimeout) {
+                clearTimeout(this.newChatSearchTimeout);
+                this.newChatSearchTimeout = null;
+            }
+        },
+        onNewChatSearchInput() {
+            const query = this.newChatSearchQuery.trim();
+            this.newChatSearchError = '';
+            if (this.newChatSearchTimeout) {
+                clearTimeout(this.newChatSearchTimeout);
+                this.newChatSearchTimeout = null;
+            }
+            if (!query) {
+                this.newChatSearchLoading = false;
+                this.newChatSearchResults = [];
+                return;
+            }
+            this.newChatSearchLoading = true;
+            this.newChatSearchTimeout = setTimeout(() => {
+                this.searchUsersForNewChat(query);
+            }, NEW_CHAT_SEARCH_DEBOUNCE_MS);
+        },
+        async searchUsersForNewChat(query) {
+            try {
+                const res = await fetch(`${API_URL}/users?q=${encodeURIComponent(query)}`, {
+                    headers: { Authorization: `Bearer ${this.token}` }
+                });
+                if (!res.ok) throw new Error('Search failed');
+                const users = await res.json();
+                this.newChatSearchResults = Array.isArray(users) ? users : [];
+            } catch (err) {
+                console.error('Search error:', err);
+                this.newChatSearchResults = [];
+                this.newChatSearchError = 'خطا در جستجو';
+            } finally {
+                this.newChatSearchLoading = false;
+                this.newChatSearchTimeout = null;
+            }
+        },
+        async handleSelectSearchedUser(user) {
+            await this.startConversation(
+                user.id,
+                user.username,
+                user.displayName,
+                user.avatarUrl,
+                user.isOnline
+            );
+            this.closeNewChatModal();
         },
         async startConversation(userId, username, displayName = '', avatarUrl = '', isOnline = false) {
             console.log('Starting conversation with:', userId, username);
@@ -1403,4 +1400,7 @@ createApp({
             }
         },
     },
-}).mount('#app');
+});
+
+app.component('user-search-item', UserSearchItem);
+app.mount('#app');

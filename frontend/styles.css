@@ -254,11 +254,6 @@ button {
     transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
-.icon-text {
-    font-size: 1rem;
-    color: var(--muted);
-}
-
 .icon-btn:hover {
     background: var(--surface-muted);
     border-color: #d4d1ca;
@@ -619,29 +614,6 @@ button {
 .btn-danger:disabled {
     opacity: 0.6;
     cursor: not-allowed;
-}
-
-.search-bar {
-    margin: 0.75rem 1.25rem 0.5rem 1.25rem;
-    padding: 0.6rem 0.75rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    background: var(--surface-muted);
-}
-
-.search-bar input {
-    width: 100%;
-    border: none;
-    background: transparent;
-    font-size: 0.95rem;
-    color: var(--ink);
-}
-
-.search-bar input:focus {
-    outline: none;
 }
 
 .conversations-list {
@@ -1059,6 +1031,7 @@ button {
 
 .input-container input {
     flex: 1;
+    min-width: 0;
     padding: 0.65rem 0.35rem;
     border: none;
     background: transparent;
@@ -1300,8 +1273,6 @@ button {
         height: 100%;
         min-height: 0;
     }
-    .search-bar { margin: 0.5rem 1rem; }
-
     .chat-list-panel {
         display: none;
         max-height: none;
@@ -1352,17 +1323,25 @@ button {
     }
 
     .input-container {
-        gap: 0.25rem;
+        gap: 0.35rem;
+        padding: 0.3rem;
     }
 
     .input-container input {
-        padding: 0.6rem;
+        padding: 0.55rem 0.4rem;
         font-size: 1rem;
     }
 
-    .input-container button {
-        padding: 0.6rem 1rem;
-        font-size: 0.9rem;
+    .input-container .icon-btn {
+        flex: 0 0 auto;
+        width: 40px;
+        min-width: 40px;
+        height: 40px;
+        padding: 0;
+    }
+
+    .input-container .icon-btn.solid {
+        box-shadow: none;
     }
 
     .auth-card {
@@ -1398,11 +1377,6 @@ button {
     .menu-btn {
         font-size: 1.25rem;
         padding: 0.25rem;
-    }
-
-    .search-bar input {
-        font-size: 0.8rem;
-        padding: 0.4rem;
     }
 
     .message-status {
