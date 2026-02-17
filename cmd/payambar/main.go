@@ -103,6 +103,29 @@ func panicRecovery() gin.HandlerFunc {
 	})
 }
 
+func shouldServeSPA(c *gin.Context) bool {
+	if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+		return false
+	}
+
+	accept := c.GetHeader("Accept")
+	if !strings.Contains(accept, "text/html") {
+		return false
+	}
+
+	reqPath := c.Request.URL.Path
+	if reqPath == "" {
+		return false
+	}
+
+	// Do not SPA-fallback unknown file-like paths (common scanner probes).
+	if ext := strings.ToLower(path.Ext(reqPath)); ext != "" {
+		return false
+	}
+
+	return true
+}
+
 func main() {
 	// Load configuration
 	cfg := config.Load()
@@ -297,6 +320,11 @@ func main() {
 
 		// Serve index.html for all other routes (SPA)
 		router.NoRoute(func(c *gin.Context) {
+			if !shouldServeSPA(c) {
+				c.JSON(http.StatusNotFound, gin.H{"error": __("not found")})
+				return
+			}
+
 			data, err := fs.ReadFile(staticFS, "static/index.html")
 			if err != nil {
 				c.JSON(404, gin.H{"error": __("not found")})

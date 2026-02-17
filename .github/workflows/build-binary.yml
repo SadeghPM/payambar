@@ -55,17 +55,6 @@ jobs:
               mkdir -p bin
               CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-darwin-arm64 ./cmd/payambar
 
-          - os: macos-13
-            goos: darwin
-            goarch: amd64
-            output_name: payambar-darwin-amd64
-            archive_name: payambar-darwin-amd64.zip
-            install_deps: |
-              brew install make || true
-            build_cmd: |
-              mkdir -p bin
-              CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-darwin-amd64 ./cmd/payambar
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
