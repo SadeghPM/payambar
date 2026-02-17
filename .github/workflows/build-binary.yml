@@ -2,9 +2,15 @@ name: Build Binaries
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "**" ]
+    tags: [ "*" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "**" ]
+  release:
+    types: [ published ]
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -17,22 +23,48 @@ jobs:
             goos: linux
             goarch: amd64
             output_name: payambar-linux-amd64
+            archive_name: payambar-linux-amd64.zip
             install_deps: |
               sudo apt-get update
               sudo apt-get install -y libsqlite3-dev
             build_cmd: |
+              mkdir -p bin
               CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-linux-amd64 ./cmd/payambar
+
+          - os: ubuntu-24.04-arm
+            goos: linux
+            goarch: arm64
+            output_name: payambar-linux-arm64
+            archive_name: payambar-linux-arm64.zip
+            install_deps: |
+              sudo apt-get update
+              sudo apt-get install -y libsqlite3-dev
+            build_cmd: |
+              mkdir -p bin
+              CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-linux-arm64 ./cmd/payambar
           
           - os: macos-latest
             goos: darwin
             goarch: arm64
             output_name: payambar-darwin-arm64
+            archive_name: payambar-darwin-arm64.zip
             install_deps: |
               # macOS runner usually has what's needed, but ensuring deps
               brew install make || true
             build_cmd: |
               mkdir -p bin
               CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-darwin-arm64 ./cmd/payambar
+
+          - os: macos-13
+            goos: darwin
+            goarch: amd64
+            output_name: payambar-darwin-amd64
+            archive_name: payambar-darwin-amd64.zip
+            install_deps: |
+              brew install make || true
+            build_cmd: |
+              mkdir -p bin
+              CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-darwin-amd64 ./cmd/payambar
 
     steps:
     - name: Checkout code
@@ -56,9 +88,35 @@ jobs:
     - name: Build Binary
       run: ${{ matrix.build_cmd }}
 
+    - name: Package Binary
+      run: |
+        cd bin
+        zip -9 -j "${{ matrix.archive_name }}" "${{ matrix.output_name }}"
+
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.output_name }}
-        path: bin/${{ matrix.output_name }}
+        name: ${{ matrix.archive_name }}
+        path: bin/${{ matrix.archive_name }}
         if-no-files-found: error
+
+  release:
+    name: Publish Release Assets
+    needs: build
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download Build Artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist
+        merge-multiple: true
+
+    - name: Upload Assets to GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.ref_name }}
+        name: ${{ github.ref_name }}
+        generate_release_notes: true
+        files: dist/*
+        fail_on_unmatched_files: true
