@@ -1,4 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="64" fill="#3b82f6"/>
-  <text x="256" y="340" font-size="280" font-family="Arial" font-weight="bold" text-anchor="middle" fill="white">پ</text>
+  <defs>
+    <radialGradient id="g" cx="20%" cy="15%" r="90%">
+      <stop offset="0%" stop-color="#33dca5"/>
+      <stop offset="100%" stop-color="#0d3048"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <rect x="132" y="145" width="248" height="210" rx="58" fill="#fff"/>
+  <path d="M214 355h86l-49 82z" fill="#fff"/>
+  <rect x="182" y="220" width="150" height="26" rx="13" fill="#0f6d4f"/>
+  <rect x="182" y="268" width="126" height="26" rx="13" fill="#0f6d4f"/>
+  <rect x="182" y="316" width="170" height="26" rx="13" fill="#0f6d4f"/>
 </svg>
