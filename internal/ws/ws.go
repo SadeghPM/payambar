@@ -29,16 +29,16 @@ type Client struct {
 }
 
 type MessageEvent struct {
-	Type        string     `json:"type"` // "message", "status_update"
-	MessageID   int        `json:"message_id,omitempty"`
-	ClientMsgID string     `json:"client_message_id,omitempty"`
-	SenderID    int        `json:"sender_id,omitempty"`
-	ReceiverID  int        `json:"receiver_id,omitempty"`
-	Content     string     `json:"content,omitempty"`
-	Status      string     `json:"status,omitempty"`
-	CreatedAt   time.Time  `json:"created_at,omitempty"`
-	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
-	ReadAt      *time.Time `json:"read_at,omitempty"`
+	Type        string                 `json:"type"` // "message", "status_update"
+	MessageID   int                    `json:"message_id,omitempty"`
+	ClientMsgID string                 `json:"client_message_id,omitempty"`
+	SenderID    int                    `json:"sender_id,omitempty"`
+	ReceiverID  int                    `json:"receiver_id,omitempty"`
+	Content     string                 `json:"content,omitempty"`
+	Status      string                 `json:"status,omitempty"`
+	CreatedAt   time.Time              `json:"created_at,omitempty"`
+	DeliveredAt *time.Time             `json:"delivered_at,omitempty"`
+	ReadAt      *time.Time             `json:"read_at,omitempty"`
 	FileName    string                 `json:"file_name,omitempty"`
 	FileURL     string                 `json:"file_url,omitempty"`
 	Payload     map[string]interface{} `json:"payload,omitempty"`
@@ -194,14 +194,14 @@ func (h *Hub) broadcast_message(message interface{}) {
 func (h *Hub) HandleWebSocket(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("Upgrade error: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "websocket upgrade failed"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("websocket upgrade failed")})
 		return
 	}
 

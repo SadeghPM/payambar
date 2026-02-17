@@ -3,8 +3,8 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/gin-gonic/gin"
 	"github.com/4xmen/payambar/internal/auth"
+	"github.com/gin-gonic/gin"
 )
 
 type AuthHandler struct {
@@ -35,20 +35,20 @@ type AuthResponse struct {
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req RegisterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid request")})
 		return
 	}
 
 	userID, err := h.authSvc.Register(req.Username, req.Password)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __(err.Error())})
 		return
 	}
 
 	// Generate token
 	token, err := h.authSvc.GenerateToken(userID, req.Username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to generate token")})
 		return
 	}
 
@@ -63,20 +63,20 @@ func (h *AuthHandler) Register(c *gin.Context) {
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid request")})
 		return
 	}
 
 	token, err := h.authSvc.Login(req.Username, req.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __(err.Error())})
 		return
 	}
 
 	// Get user ID
 	userID, err := h.authSvc.GetUserByUsername(req.Username)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to get user")})
 		return
 	}
 
@@ -107,26 +107,26 @@ func (h *AuthHandler) AuthMiddleware() gin.HandlerFunc {
 		}
 
 		if token == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "missing authorization token"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": __("missing authorization token")})
 			c.Abort()
 			return
 		}
 
 		claims, err := h.authSvc.ValidateToken(token)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": __("invalid token")})
 			c.Abort()
 			return
 		}
 
 		exists, err := h.authSvc.UserExists(claims.UserID)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to validate user"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to validate user")})
 			c.Abort()
 			return
 		}
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": __("user not found")})
 			c.Abort()
 			return
 		}

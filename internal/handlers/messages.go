@@ -102,19 +102,19 @@ type ConversationPreview struct {
 func (h *MessageHandler) GetConversation(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
 	otherUserIDStr := c.Query("user_id")
 	if otherUserIDStr == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id query parameter required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("user_id query parameter required")})
 		return
 	}
 
 	otherUserID, err := strconv.Atoi(otherUserIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid user_id")})
 		return
 	}
 
@@ -138,11 +138,11 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 		"SELECT EXISTS(SELECT 1 FROM conversations WHERE participants = ? OR participants = ?)",
 		pattern1, pattern2,
 	).Scan(&convExists); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to check conversation"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to check conversation")})
 		return
 	}
 	if !convExists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": __("conversation not found")})
 		return
 	}
 
@@ -158,7 +158,7 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 	`, currentUserID, otherUserID, otherUserID, currentUserID, limit, offset)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch messages"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch messages")})
 		return
 	}
 	defer rows.Close()
@@ -168,7 +168,7 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 		msg := &models.Message{}
 		var fileName, filePath sql.NullString
 		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Content, &msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.ReadAt, &fileName, &filePath); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to scan message"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to scan message")})
 			return
 		}
 		// Set file attachment if present
@@ -193,7 +193,7 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 func (h *MessageHandler) GetConversations(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
@@ -209,7 +209,7 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 	`, strconv.Itoa(currentUserID)+",%", "%,"+strconv.Itoa(currentUserID))
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch conversations"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch conversations")})
 		return
 	}
 
@@ -360,14 +360,14 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 func (h *MessageHandler) MarkAsDelivered(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
 	messageIDStr := c.Param("id")
 	messageID, err := strconv.Atoi(messageIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid message id")})
 		return
 	}
 
@@ -377,7 +377,7 @@ func (h *MessageHandler) MarkAsDelivered(c *gin.Context) {
 	var receiverID int
 	err = h.db.QueryRow("SELECT receiver_id FROM messages WHERE id = ?", messageID).Scan(&receiverID)
 	if err != nil || receiverID != currentUserID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "cannot mark this message"})
+		c.JSON(http.StatusForbidden, gin.H{"error": __("cannot mark this message")})
 		return
 	}
 
@@ -388,7 +388,7 @@ func (h *MessageHandler) MarkAsDelivered(c *gin.Context) {
 	`, messageID)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update message"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to update message")})
 		return
 	}
 
@@ -399,14 +399,14 @@ func (h *MessageHandler) MarkAsDelivered(c *gin.Context) {
 func (h *MessageHandler) MarkAsRead(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
 	messageIDStr := c.Param("id")
 	messageID, err := strconv.Atoi(messageIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid message id")})
 		return
 	}
 
@@ -416,7 +416,7 @@ func (h *MessageHandler) MarkAsRead(c *gin.Context) {
 	var receiverID int
 	err = h.db.QueryRow("SELECT receiver_id FROM messages WHERE id = ?", messageID).Scan(&receiverID)
 	if err != nil || receiverID != currentUserID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "cannot mark this message"})
+		c.JSON(http.StatusForbidden, gin.H{"error": __("cannot mark this message")})
 		return
 	}
 
@@ -427,7 +427,7 @@ func (h *MessageHandler) MarkAsRead(c *gin.Context) {
 	`, messageID, currentUserID)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update message"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to update message")})
 		return
 	}
 
@@ -438,14 +438,14 @@ func (h *MessageHandler) MarkAsRead(c *gin.Context) {
 func (h *MessageHandler) DeleteMessage(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
 	messageIDStr := c.Param("id")
 	messageID, err := strconv.Atoi(messageIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid message id")})
 		return
 	}
 
@@ -456,15 +456,15 @@ func (h *MessageHandler) DeleteMessage(c *gin.Context) {
 	err = h.db.QueryRow("SELECT sender_id FROM messages WHERE id = ?", messageID).Scan(&senderID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": __("message not found")})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch message"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch message")})
 		return
 	}
 
 	if senderID != currentUserID {
-		c.JSON(http.StatusForbidden, gin.H{"error": "can only delete own messages"})
+		c.JSON(http.StatusForbidden, gin.H{"error": __("can only delete own messages")})
 		return
 	}
 
@@ -480,7 +480,7 @@ func (h *MessageHandler) DeleteMessage(c *gin.Context) {
 	// Delete the message
 	_, err = h.db.Exec("DELETE FROM messages WHERE id = ? AND sender_id = ?", messageID, currentUserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete message"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete message")})
 		return
 	}
 
@@ -493,7 +493,7 @@ func (h *MessageHandler) GetUserProfile(c *gin.Context) {
 	username = strings.TrimSpace(username)
 
 	if username == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "username required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("username required")})
 		return
 	}
 
@@ -504,10 +504,10 @@ func (h *MessageHandler) GetUserProfile(c *gin.Context) {
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": __("user not found")})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch user")})
 		return
 	}
 
@@ -527,7 +527,7 @@ func (h *MessageHandler) GetUserProfile(c *gin.Context) {
 func (h *MessageHandler) GetUsers(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
@@ -550,7 +550,7 @@ func (h *MessageHandler) GetUsers(c *gin.Context) {
 	}
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch users"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch users")})
 		return
 	}
 	defer rows.Close()
@@ -594,7 +594,7 @@ func (h *MessageHandler) GetUsers(c *gin.Context) {
 func (h *MessageHandler) CreateConversation(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
@@ -603,12 +603,12 @@ func (h *MessageHandler) CreateConversation(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid request")})
 		return
 	}
 
 	if req.ParticipantID == userID.(int) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot create conversation with yourself"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("cannot create conversation with yourself")})
 		return
 	}
 
@@ -616,7 +616,7 @@ func (h *MessageHandler) CreateConversation(c *gin.Context) {
 	var exists2 bool
 	err := h.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", req.ParticipantID).Scan(&exists2)
 	if err != nil || !exists2 {
-		c.JSON(http.StatusNotFound, gin.H{"error": "participant not found"})
+		c.JSON(http.StatusNotFound, gin.H{"error": __("participant not found")})
 		return
 	}
 
@@ -655,7 +655,7 @@ func (h *MessageHandler) CreateConversation(c *gin.Context) {
 	`, participants)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create conversation"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to create conversation")})
 		return
 	}
 
@@ -680,14 +680,14 @@ func (h *MessageHandler) CreateConversation(c *gin.Context) {
 func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
 	convIDStr := c.Param("id")
 	convID, err := strconv.Atoi(convIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid conversation id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid conversation id")})
 		return
 	}
 
@@ -695,7 +695,7 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 
 	tx, err := h.db.Begin()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start transaction"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to start transaction")})
 		return
 	}
 	committed := false
@@ -709,10 +709,10 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 	err = tx.QueryRow("SELECT participants FROM conversations WHERE id = ?", convID).Scan(&participantsStr)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "conversation not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": __("conversation not found")})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch conversation"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch conversation")})
 		return
 	}
 
@@ -731,11 +731,11 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 	}
 
 	if !hasCurrent {
-		c.JSON(http.StatusForbidden, gin.H{"error": "not a participant"})
+		c.JSON(http.StatusForbidden, gin.H{"error": __("not a participant")})
 		return
 	}
 	if len(participantIDs) < 2 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid participants"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid participants")})
 		return
 	}
 	if len(participantIDs) > 2 {
@@ -752,7 +752,7 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 		WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)
 	`, p1, p2, p2, p1)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch files"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch files")})
 		return
 	}
 	for fileRows.Next() {
@@ -770,7 +770,7 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 		)
 	`, p1, p2, p2, p1)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete files"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete files")})
 		return
 	}
 
@@ -779,18 +779,18 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 		WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)
 	`, p1, p2, p2, p1)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete messages"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete messages")})
 		return
 	}
 
 	_, err = tx.Exec("DELETE FROM conversations WHERE id = ?", convID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete conversation"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete conversation")})
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit delete"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to commit delete")})
 		return
 	}
 	committed = true
@@ -808,26 +808,26 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 func (h *MessageHandler) UploadFile(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("file is required")})
 		return
 	}
 	defer file.Close()
 
 	if header.Size > h.maxUploadSize {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "file too large"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("file too large")})
 		return
 	}
 
 	receiverIDStr := c.PostForm("receiver_id")
 	receiverID, err := strconv.Atoi(receiverIDStr)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid receiver_id"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid receiver_id")})
 		return
 	}
 
@@ -837,7 +837,7 @@ func (h *MessageHandler) UploadFile(c *gin.Context) {
 		VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP)
 	`, userID.(int), receiverID, "[فایل]")
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create message"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to create message")})
 		return
 	}
 
@@ -851,7 +851,7 @@ func (h *MessageHandler) UploadFile(c *gin.Context) {
 
 	// Save file
 	if err := c.SaveUploadedFile(header, uploadPath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to save file")})
 		return
 	}
 
@@ -861,7 +861,7 @@ func (h *MessageHandler) UploadFile(c *gin.Context) {
 		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
 	`, messageID, safeFilename, uploadPath, header.Size, header.Header.Get("Content-Type"))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file record"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to save file record")})
 		return
 	}
 
@@ -892,7 +892,7 @@ func (h *MessageHandler) UploadFile(c *gin.Context) {
 func (h *MessageHandler) UpdateProfile(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
@@ -901,7 +901,7 @@ func (h *MessageHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid request")})
 		return
 	}
 
@@ -910,7 +910,7 @@ func (h *MessageHandler) UpdateProfile(c *gin.Context) {
 	`, req.DisplayName, userID.(int))
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update profile"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to update profile")})
 		return
 	}
 
@@ -921,13 +921,13 @@ func (h *MessageHandler) UpdateProfile(c *gin.Context) {
 func (h *MessageHandler) UploadAvatar(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
 	file, header, err := c.Request.FormFile("avatar")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar file is required"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("avatar file is required")})
 		return
 	}
 	defer file.Close()
@@ -935,13 +935,13 @@ func (h *MessageHandler) UploadAvatar(c *gin.Context) {
 	// Validate content type
 	contentType := header.Header.Get("Content-Type")
 	if !strings.HasPrefix(contentType, "image/") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "file must be an image"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("file must be an image")})
 		return
 	}
 
 	// Limit file size to 2MB
 	if header.Size > 500*1024 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "avatar must be smaller than 500KB"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("avatar must be smaller than 500KB")})
 		return
 	}
 
@@ -957,7 +957,7 @@ func (h *MessageHandler) UploadAvatar(c *gin.Context) {
 
 	// Save file
 	if err := c.SaveUploadedFile(header, uploadPath); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save avatar"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to save avatar")})
 		return
 	}
 
@@ -968,7 +968,7 @@ func (h *MessageHandler) UploadAvatar(c *gin.Context) {
 	`, avatarURL, userID.(int))
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update avatar"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to update avatar")})
 		return
 	}
 
@@ -981,7 +981,7 @@ func (h *MessageHandler) UploadAvatar(c *gin.Context) {
 func (h *MessageHandler) DeleteAccount(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
@@ -989,7 +989,7 @@ func (h *MessageHandler) DeleteAccount(c *gin.Context) {
 
 	tx, err := h.db.Begin()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to start transaction"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to start transaction")})
 		return
 	}
 	committed := false
@@ -1002,10 +1002,10 @@ func (h *MessageHandler) DeleteAccount(c *gin.Context) {
 	var avatarURL sql.NullString
 	if err := tx.QueryRow("SELECT avatar_url FROM users WHERE id = ?", currentUserID).Scan(&avatarURL); err != nil {
 		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+			c.JSON(http.StatusNotFound, gin.H{"error": __("user not found")})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch user")})
 		return
 	}
 
@@ -1016,7 +1016,7 @@ func (h *MessageHandler) DeleteAccount(c *gin.Context) {
 		WHERE m.sender_id = ? OR m.receiver_id = ?
 	`, currentUserID, currentUserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch files"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch files")})
 		return
 	}
 	for fileRows.Next() {
@@ -1033,13 +1033,13 @@ func (h *MessageHandler) DeleteAccount(c *gin.Context) {
 		)
 	`, currentUserID, currentUserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete files"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete files")})
 		return
 	}
 
 	_, err = tx.Exec("DELETE FROM messages WHERE sender_id = ? OR receiver_id = ?", currentUserID, currentUserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete messages"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete messages")})
 		return
 	}
 
@@ -1047,18 +1047,18 @@ func (h *MessageHandler) DeleteAccount(c *gin.Context) {
 	pattern2 := "%," + strconv.Itoa(currentUserID)
 	_, err = tx.Exec("DELETE FROM conversations WHERE participants LIKE ? OR participants LIKE ?", pattern1, pattern2)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete conversations"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete conversations")})
 		return
 	}
 
 	_, err = tx.Exec("DELETE FROM users WHERE id = ?", currentUserID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete user"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete user")})
 		return
 	}
 
 	if err := tx.Commit(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to commit delete"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to commit delete")})
 		return
 	}
 	committed = true
@@ -1084,7 +1084,7 @@ func (h *MessageHandler) DeleteAccount(c *gin.Context) {
 func (h *MessageHandler) GetMyProfile(c *gin.Context) {
 	userID, exists := c.Get("user_id")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
 		return
 	}
 
@@ -1094,7 +1094,7 @@ func (h *MessageHandler) GetMyProfile(c *gin.Context) {
 	`, userID.(int)).Scan(&user.ID, &user.Username, &user.DisplayName, &user.AvatarURL, &user.CreatedAt)
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch profile"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch profile")})
 		return
 	}
 

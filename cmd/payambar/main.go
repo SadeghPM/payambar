@@ -32,7 +32,7 @@ func rateLimitMiddleware(limiterInstance *limiter.Limiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		limiterContext, err := limiterInstance.Get(c.Request.Context(), c.ClientIP())
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "rate limiter error"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": __("rate limiter error")})
 			c.Abort()
 			return
 		}
@@ -42,7 +42,7 @@ func rateLimitMiddleware(limiterInstance *limiter.Limiter) gin.HandlerFunc {
 		c.Header("X-RateLimit-Reset", fmt.Sprintf("%d", limiterContext.Reset))
 
 		if limiterContext.Reached {
-			c.JSON(http.StatusTooManyRequests, gin.H{"error": "rate limit exceeded"})
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": __("rate limit exceeded")})
 			c.Abort()
 			return
 		}
@@ -99,7 +99,7 @@ func panicRecovery() gin.HandlerFunc {
 			recovered,
 			debug.Stack(),
 		)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "internal server error"})
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": __("internal server error")})
 	})
 }
 
@@ -212,7 +212,7 @@ func main() {
 		router.GET("/manifest.json", func(c *gin.Context) {
 			data, err := fs.ReadFile(staticFS, "static/manifest.json")
 			if err != nil {
-				c.JSON(404, gin.H{"error": "not found"})
+				c.JSON(404, gin.H{"error": __("not found")})
 				return
 			}
 			c.Header("Cache-Control", "public, max-age=3600")
@@ -223,7 +223,7 @@ func main() {
 		router.GET("/sw.js", func(c *gin.Context) {
 			data, err := fs.ReadFile(staticFS, "static/sw.js")
 			if err != nil {
-				c.JSON(404, gin.H{"error": "not found"})
+				c.JSON(404, gin.H{"error": __("not found")})
 				return
 			}
 			c.Header("Cache-Control", "public, max-age=3600")
@@ -234,7 +234,7 @@ func main() {
 		router.GET("/styles.css", func(c *gin.Context) {
 			data, err := fs.ReadFile(staticFS, "static/styles.css")
 			if err != nil {
-				c.JSON(404, gin.H{"error": "not found"})
+				c.JSON(404, gin.H{"error": __("not found")})
 				return
 			}
 			c.Header("Cache-Control", "public, max-age=31536000, immutable")
@@ -244,7 +244,7 @@ func main() {
 		router.GET("/app.js", func(c *gin.Context) {
 			data, err := fs.ReadFile(staticFS, "static/app.js")
 			if err != nil {
-				c.JSON(404, gin.H{"error": "not found"})
+				c.JSON(404, gin.H{"error": __("not found")})
 				return
 			}
 			c.Header("Cache-Control", "public, max-age=31536000, immutable")
@@ -254,7 +254,7 @@ func main() {
 		router.GET("/vue.global.prod.js", func(c *gin.Context) {
 			data, err := fs.ReadFile(staticFS, "static/vue.global.prod.js")
 			if err != nil {
-				c.JSON(404, gin.H{"error": "not found"})
+				c.JSON(404, gin.H{"error": __("not found")})
 				return
 			}
 			c.Header("Cache-Control", "public, max-age=31536000, immutable")
@@ -266,7 +266,7 @@ func main() {
 			file := strings.TrimPrefix(c.Param("filepath"), "/")
 			data, err := fs.ReadFile(staticFS, path.Join("static/fonts", file))
 			if err != nil {
-				c.JSON(404, gin.H{"error": "not found"})
+				c.JSON(404, gin.H{"error": __("not found")})
 				return
 			}
 			c.Header("Cache-Control", "public, max-age=31536000, immutable")
@@ -278,7 +278,7 @@ func main() {
 			return func(c *gin.Context) {
 				data, err := fs.ReadFile(staticFS, "static/"+filename)
 				if err != nil {
-					c.JSON(404, gin.H{"error": "not found"})
+					c.JSON(404, gin.H{"error": __("not found")})
 					return
 				}
 				c.Header("Cache-Control", "public, max-age=31536000, immutable")
@@ -299,7 +299,7 @@ func main() {
 		router.NoRoute(func(c *gin.Context) {
 			data, err := fs.ReadFile(staticFS, "static/index.html")
 			if err != nil {
-				c.JSON(404, gin.H{"error": "not found"})
+				c.JSON(404, gin.H{"error": __("not found")})
 				return
 			}
 			c.Header("Cache-Control", "public, max-age=3600")
@@ -312,7 +312,7 @@ func main() {
 		// Fallback if embed fails
 		log.Printf("Warning: Could not embed static files: %v", err)
 		router.NoRoute(func(c *gin.Context) {
-			c.JSON(404, gin.H{"error": "not found"})
+			c.JSON(404, gin.H{"error": __("not found")})
 		})
 	}
 
