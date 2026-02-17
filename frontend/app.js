@@ -150,9 +150,7 @@ const app = createApp({
             return !!this.token && !!this.userId && this.userId > 0;
         },
         filteredConversations() {
-            const convs = [...this.conversations];
-            // Sort by latest known message time (newest first)
-            convs.sort((a, b) => this.getConversationLastTimestamp(b) - this.getConversationLastTimestamp(a));
+            const convs = this.getSortedConversations();
             const q = this.searchQuery.trim().toLowerCase();
             if (!q) return convs;
             return convs.filter((c) =>
@@ -326,20 +324,38 @@ const app = createApp({
             if (!el) return;
             this.pullToRefresh.ready = this.isNearBottom(el);
         },
+        parseTimestamp(value) {
+            if (!value) return 0;
+            const ts = new Date(value).getTime();
+            return Number.isFinite(ts) ? ts : 0;
+        },
         getConversationLastTimestamp(conv) {
             if (!conv) return 0;
+            const fromConversation = this.parseTimestamp(conv.last_message_at);
             const localMessages = this.messages[conv.user_id] || [];
-            const latestLocal = localMessages.length ? localMessages[localMessages.length - 1]?.created_at : null;
-            const source = latestLocal || conv.last_message_at;
-            if (!source) return 0;
-            const ts = new Date(source).getTime();
-            return isNaN(ts) ? 0 : ts;
+            let localMax = 0;
+            for (const msg of localMessages) {
+                const ts = this.parseTimestamp(msg?.created_at);
+                if (ts > localMax) localMax = ts;
+            }
+            return Math.max(fromConversation, localMax);
+        },
+        getSortedConversations() {
+            return [...this.conversations].sort((a, b) => {
+                return this.getConversationLastTimestamp(b) - this.getConversationLastTimestamp(a);
+            });
+        },
+        sortConversationsInPlace() {
+            this.conversations.sort((a, b) => {
+                return this.getConversationLastTimestamp(b) - this.getConversationLastTimestamp(a);
+            });
         },
         updateConversationLastMessage(userId, timestamp) {
             if (!userId || !timestamp) return;
             const idx = this.conversations.findIndex(c => c.user_id === userId);
             if (idx === -1) return;
             this.conversations[idx].last_message_at = timestamp;
+            this.sortConversationsInPlace();
         },
         async handleLogin() {
             this.authError = '';
@@ -553,6 +569,7 @@ const app = createApp({
                 this.serverOffline = false;
                 const data = await res.json();
                 this.conversations = data.conversations || [];
+                this.sortConversationsInPlace();
             } catch (err) {
                 console.error(err);
                 this.serverOffline = true;
