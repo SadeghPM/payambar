@@ -79,6 +79,7 @@ const app = createApp({
             wsReconnectDelay: 3000,
             wsReconnectTimer: null,
             wsIntentionalClose: false,
+            wsConnected: false,
             authTab: 'login',
             login: { username: '', password: '' },
             register: { username: '', password: '', confirm: '' },
@@ -150,6 +151,13 @@ const app = createApp({
     computed: {
         isAuthed() {
             return !!this.token && !!this.userId && this.userId > 0;
+        },
+        userProfileStatusText() {
+            if (!this.isAuthed) return '';
+            if (this.wsConnected) {
+                return 'آنلاین';
+            }
+            return 'در حال اتصال...';
         },
         filteredConversations() {
             const convs = this.getSortedConversations();
@@ -1029,6 +1037,7 @@ const app = createApp({
         },
         closeWebSocket(intentional = true) {
             this.wsIntentionalClose = intentional;
+            this.wsConnected = false;
             if (this.wsReconnectTimer) {
                 clearTimeout(this.wsReconnectTimer);
                 this.wsReconnectTimer = null;
@@ -1056,12 +1065,14 @@ const app = createApp({
                 this.wsReconnectTimer = null;
             }
             this.wsIntentionalClose = false;
+            this.wsConnected = false;
             const wsUrlWithToken = `${WS_URL}?token=${encodeURIComponent(token)}`;
             this.ws = new WebSocket(wsUrlWithToken);
 
             this.ws.onopen = () => {
                 this.wsReconnectAttempts = 0;
                 this.serverOffline = false;
+                this.wsConnected = true;
             };
 
             this.ws.onmessage = (event) => {
@@ -1079,11 +1090,13 @@ const app = createApp({
                 }
                 console.error('WebSocket error:', err);
                 this.serverOffline = true;
+                this.wsConnected = false;
             };
 
             this.ws.onclose = () => {
                 const isIntentional = this.wsIntentionalClose || !this.isAuthed;
                 this.ws = null;
+                this.wsConnected = false;
                 if (isIntentional) {
                     this.wsIntentionalClose = false;
                     return;

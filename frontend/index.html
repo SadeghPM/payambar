@@ -15,11 +15,6 @@
 </head>
 <body>
     <div id="app" v-cloak>
-        <!-- Offline Banner -->
-        <div v-if="isOffline || serverOffline" class="offline-banner">
-            {{ isOffline ? 'آفلاین هستید' : 'اتصال با سرور قطع شد' }}
-        </div>
-
         <div class="auth-container" v-if="!isAuthed">
             <div class="auth-card">
                 <div class="auth-brand">
@@ -63,7 +58,7 @@
                     </div>
                     <div class="user-profile-info" @click="showProfileModal = true" style="cursor: pointer;">
                         <div class="user-profile-name">{{ profileDisplayName || (username) }}</div>
-                        <div class="user-profile-status">آنلاین</div>
+                        <div class="user-profile-status">{{ userProfileStatusText }}</div>
                     </div>
                     <button class="logout-btn" @click="handleLogout">خروج</button>
                 </div>
