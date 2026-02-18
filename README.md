@@ -74,6 +74,13 @@ Environment variables (used by the binary and the installer-generated env file):
 | `MAX_UPLOAD_SIZE` | 10485760 | Max upload bytes (10MB) |
 | `STUN_SERVERS` | stun:stun.l.google.com:19302 | WebRTC STUN list |
 | `TURN_SERVER`, `TURN_USERNAME`, `TURN_PASSWORD` | (empty) | Optional TURN (voice) — keep empty to disable |
+| `PAYAMBAR_ENV_FILE` | (empty) | Optional explicit env-file path for CLI/server startup |
+
+For CLI usage, config is resolved in this order:
+1. Process environment variables
+2. `PAYAMBAR_ENV_FILE` (if set)
+3. `/etc/payambar/payambar.env` (installer default)
+4. `.env` in current working directory
 
 ## CLI Commands
 The binary supports operational CLI commands in addition to running the server:
