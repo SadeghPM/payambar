@@ -127,9 +127,43 @@ func shouldServeSPA(c *gin.Context) bool {
 }
 
 func main() {
-	// Load configuration
 	cfg := config.Load()
 
+	if len(os.Args) > 1 {
+		if err := runCommand(cfg, os.Args[1:]); err != nil {
+			log.Fatalf("%v", err)
+		}
+		return
+	}
+
+	if err := runServer(cfg); err != nil {
+		log.Fatalf("Failed to start server: %v", err)
+	}
+}
+
+func runCommand(cfg *config.Config, args []string) error {
+	command := args[0]
+
+	switch command {
+	case "status":
+		return runStatus(cfg, os.Stdout, args[1:])
+	case "-h", "--help", "help":
+		printUsage(os.Stdout)
+		return nil
+	default:
+		printUsage(os.Stderr)
+		return fmt.Errorf("unknown command: %s", command)
+	}
+}
+
+func printUsage(out *os.File) {
+	fmt.Fprintln(out, "Usage:")
+	fmt.Fprintln(out, "  payambar           Start the web server")
+	fmt.Fprintln(out, "  payambar status    Show application statistics")
+	fmt.Fprintln(out, "  payambar status --json")
+}
+
+func runServer(cfg *config.Config) error {
 	// Ensure data directories exist
 	os.MkdirAll(cfg.FileStoragePath, 0755)
 	os.MkdirAll("/data", 0755)
@@ -137,7 +171,7 @@ func main() {
 	// Initialize database
 	database, err := db.New(cfg.DatabasePath)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	defer database.Close()
 
@@ -359,6 +393,8 @@ func main() {
 	}()
 
 	if err := router.Run(addr); err != nil {
-		log.Fatalf("Failed to start server: %v", err)
+		return err
 	}
+
+	return nil
 }

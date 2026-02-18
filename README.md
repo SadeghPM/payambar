@@ -75,6 +75,22 @@ Environment variables (used by the binary and the installer-generated env file):
 | `STUN_SERVERS` | stun:stun.l.google.com:19302 | WebRTC STUN list |
 | `TURN_SERVER`, `TURN_USERNAME`, `TURN_PASSWORD` | (empty) | Optional TURN (voice) — keep empty to disable |
 
+## CLI Commands
+The binary supports operational CLI commands in addition to running the server:
+
+```bash
+payambar                # start HTTP/WebSocket server
+payambar status         # print app/database/storage statistics
+payambar status --json  # same stats as JSON
+```
+
+Example with local build output:
+
+```bash
+./bin/payambar status
+./bin/payambar status --json
+```
+
 ## File & Directory Layout
 ```
 cmd/payambar/         # Main entrypoint (embeds static assets)
