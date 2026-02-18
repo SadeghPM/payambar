@@ -89,8 +89,6 @@ The binary supports operational CLI commands in addition to running the server:
 payambar                # start HTTP/WebSocket server
 payambar status         # print app/database/storage statistics
 payambar status --json  # same stats as JSON
-payambar migrate conversation-participants --dry-run
-payambar migrate conversation-participants --database /var/lib/payambar/payambar.db
 ```
 
 Example with local build output:
@@ -98,40 +96,7 @@ Example with local build output:
 ```bash
 ./bin/payambar status
 ./bin/payambar status --json
-./bin/payambar migrate conversation-participants --dry-run
 ```
-
-## Production Migration: conversation participants
-From this version, conversation membership is stored in `conversation_participants` (normalized table).
-
-If your production DB still has legacy `conversations.participants`, the server will refuse to start and show a migration hint.
-
-Recommended maintenance-window runbook:
-
-```bash
-# 1) Stop app
-sudo systemctl stop payambar
-
-# 2) Backup DB (+ WAL/SHM if present)
-sudo cp /var/lib/payambar/payambar.db /var/lib/payambar/payambar.db.bak
-sudo cp /var/lib/payambar/payambar.db-wal /var/lib/payambar/payambar.db-wal.bak 2>/dev/null || true
-sudo cp /var/lib/payambar/payambar.db-shm /var/lib/payambar/payambar.db-shm.bak 2>/dev/null || true
-
-# 3) Dry-run
-/opt/payambar/payambar migrate conversation-participants --database /var/lib/payambar/payambar.db --dry-run
-
-# 4) Run migration
-/opt/payambar/payambar migrate conversation-participants --database /var/lib/payambar/payambar.db
-
-# 5) Start app
-sudo systemctl start payambar
-```
-
-Rollback:
-1. Stop service.
-2. Restore DB backup files.
-3. Roll back binary if needed.
-4. Start service again.
 
 ## File & Directory Layout
 ```

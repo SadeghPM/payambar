@@ -147,8 +147,6 @@ func runCommand(cfg *config.Config, args []string) error {
 	switch command {
 	case "status":
 		return runStatus(cfg, os.Stdout, args[1:])
-	case "migrate":
-		return runMigrate(cfg, os.Stdout, args[1:])
 	case "-h", "--help", "help":
 		printUsage(os.Stdout)
 		return nil
@@ -163,18 +161,12 @@ func printUsage(out *os.File) {
 	fmt.Fprintln(out, "  payambar           Start the web server")
 	fmt.Fprintln(out, "  payambar status    Show application statistics")
 	fmt.Fprintln(out, "  payambar status --json")
-	fmt.Fprintln(out, "  payambar migrate conversation-participants [--dry-run] [--database <path>]")
 }
 
 func runServer(cfg *config.Config) error {
 	// Ensure data directories exist
 	os.MkdirAll(cfg.FileStoragePath, 0755)
 	os.MkdirAll("/data", 0755)
-
-	if err := ensureConversationParticipantsMigrated(cfg.DatabasePath); err != nil {
-		return err
-	}
-
 	// Initialize database
 	database, err := db.New(cfg.DatabasePath)
 	if err != nil {
