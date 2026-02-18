@@ -7,18 +7,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
+	"github.com/4xmen/payambar/internal/auth"
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/4xmen/payambar/internal/auth"
 )
 
 var (
-	testDB      *sql.DB
-	testAuthSvc *auth.Service
-	testRouter  *gin.Engine
+	testDB        *sql.DB
+	testAuthSvc   *auth.Service
+	testRouter    *gin.Engine
 	testUploadDir string
 )
 
@@ -47,9 +48,15 @@ func TestMain(m *testing.M) {
 
 		CREATE TABLE IF NOT EXISTS conversations (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			participants TEXT NOT NULL,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS conversation_participants (
+			conversation_id INTEGER NOT NULL,
+			user_id INTEGER NOT NULL,
+			joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (conversation_id, user_id)
 		);
 
 		CREATE TABLE IF NOT EXISTS messages (
@@ -114,8 +121,10 @@ func setupTestRouter() *gin.Engine {
 		protected.GET("/conversations", msgHandler.GetConversations)
 		protected.GET("/users", msgHandler.GetUsers)
 		protected.POST("/conversations", msgHandler.CreateConversation)
+		protected.DELETE("/conversations/:id", msgHandler.DeleteConversation)
 		protected.PUT("/messages/:id/delivered", msgHandler.MarkAsDelivered)
 		protected.PUT("/messages/:id/read", msgHandler.MarkAsRead)
+		protected.DELETE("/profile", msgHandler.DeleteAccount)
 	}
 
 	return router
@@ -124,8 +133,30 @@ func setupTestRouter() *gin.Engine {
 func clearTestData() {
 	testDB.Exec("DELETE FROM files")
 	testDB.Exec("DELETE FROM messages")
+	testDB.Exec("DELETE FROM conversation_participants")
 	testDB.Exec("DELETE FROM conversations")
 	testDB.Exec("DELETE FROM users")
+}
+
+func insertDirectConversation(t *testing.T, user1ID, user2ID int) int64 {
+	t.Helper()
+
+	result, err := testDB.Exec("INSERT INTO conversations DEFAULT VALUES")
+	if err != nil {
+		t.Fatalf("Failed to create conversation: %v", err)
+	}
+	convID, err := result.LastInsertId()
+	if err != nil {
+		t.Fatalf("Failed to get conversation id: %v", err)
+	}
+	_, err = testDB.Exec(
+		`INSERT INTO conversation_participants (conversation_id, user_id) VALUES (?, ?), (?, ?)`,
+		convID, user1ID, convID, user2ID,
+	)
+	if err != nil {
+		t.Fatalf("Failed to attach conversation participants: %v", err)
+	}
+	return convID
 }
 
 func TestRegister(t *testing.T) {
@@ -302,8 +333,7 @@ func TestConversations(t *testing.T) {
 
 	t.Run("get conversations", func(t *testing.T) {
 		// Ensure conversation exists (in case subtests run in isolation)
-		testDB.Exec("INSERT OR IGNORE INTO conversations (participants) VALUES (?)",
-			strconv.Itoa(user1ID)+","+strconv.Itoa(user2ID))
+		insertDirectConversation(t, user1ID, user2ID)
 
 		req := httptest.NewRequest("GET", "/api/conversations", nil)
 		req.Header.Set("Authorization", "Bearer "+token1)
@@ -382,11 +412,7 @@ func TestMessages(t *testing.T) {
 	token2, _ := testAuthSvc.GenerateToken(user2ID, "msguser2")
 
 	// Create a conversation
-	_, err := testDB.Exec("INSERT INTO conversations (participants) VALUES (?)",
-		strconv.Itoa(user1ID)+","+strconv.Itoa(user2ID))
-	if err != nil {
-		t.Fatalf("Failed to create conversation: %v", err)
-	}
+	insertDirectConversation(t, user1ID, user2ID)
 
 	// Insert a test message
 	result, err := testDB.Exec(`
@@ -542,11 +568,7 @@ func TestConversationIDMatching(t *testing.T) {
 	user12ID, _ := testAuthSvc.Register("user_twelve", "password123")
 
 	// Create a conversation between user11 and user12 (not involving user1)
-	_, err := testDB.Exec("INSERT INTO conversations (participants) VALUES (?)",
-		strconv.Itoa(user11ID)+","+strconv.Itoa(user12ID))
-	if err != nil {
-		t.Fatalf("Failed to create conversation: %v", err)
-	}
+	insertDirectConversation(t, user11ID, user12ID)
 
 	// User1 should see ZERO conversations
 	token1, _ := testAuthSvc.GenerateToken(user1ID, "user_one")
@@ -568,5 +590,196 @@ func TestConversationIDMatching(t *testing.T) {
 	if len(conversations) != 0 {
 		t.Errorf("User1 (ID=%d) should see 0 conversations, but got %d (likely matched user %d or %d by mistake)",
 			user1ID, len(conversations), user11ID, user12ID)
+	}
+}
+
+func TestDeleteConversationCleansUpData(t *testing.T) {
+	clearTestData()
+
+	user1ID, _ := testAuthSvc.Register("delconv_user1", "password123")
+	user2ID, _ := testAuthSvc.Register("delconv_user2", "password123")
+	token1, _ := testAuthSvc.GenerateToken(user1ID, "delconv_user1")
+
+	convID := insertDirectConversation(t, user1ID, user2ID)
+
+	messageResult, err := testDB.Exec(`
+		INSERT INTO messages (sender_id, receiver_id, content, status)
+		VALUES (?, ?, ?, 'sent')
+	`, user1ID, user2ID, "conversation delete test")
+	if err != nil {
+		t.Fatalf("Failed to insert message: %v", err)
+	}
+	messageID, _ := messageResult.LastInsertId()
+
+	filePath := filepath.Join(testUploadDir, "delete-conversation.txt")
+	if err := os.WriteFile(filePath, []byte("test"), 0o644); err != nil {
+		t.Fatalf("Failed to create file fixture: %v", err)
+	}
+	_, err = testDB.Exec(`
+		INSERT INTO files (message_id, file_name, file_path, file_size, content_type)
+		VALUES (?, ?, ?, ?, ?)
+	`, messageID, "delete-conversation.txt", filePath, 4, "text/plain")
+	if err != nil {
+		t.Fatalf("Failed to insert file record: %v", err)
+	}
+
+	req := httptest.NewRequest("DELETE", "/api/conversations/"+strconv.FormatInt(convID, 10), nil)
+	req.Header.Set("Authorization", "Bearer "+token1)
+	w := httptest.NewRecorder()
+
+	testRouter.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("DeleteConversation() status = %d, want 200", w.Code)
+	}
+
+	var count int
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM conversations WHERE id = ?", convID).Scan(&count); err != nil {
+		t.Fatalf("Failed to check conversations: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Expected conversation to be deleted, got count=%d", count)
+	}
+
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = ?", convID).Scan(&count); err != nil {
+		t.Fatalf("Failed to check conversation_participants: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Expected conversation participants to be deleted, got count=%d", count)
+	}
+
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM messages WHERE (sender_id = ? AND receiver_id = ?) OR (sender_id = ? AND receiver_id = ?)", user1ID, user2ID, user2ID, user1ID).Scan(&count); err != nil {
+		t.Fatalf("Failed to check messages: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Expected related messages to be deleted, got count=%d", count)
+	}
+
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM files").Scan(&count); err != nil {
+		t.Fatalf("Failed to check files: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Expected related files to be deleted, got count=%d", count)
+	}
+
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Fatalf("Expected uploaded file to be removed, err=%v", err)
+	}
+}
+
+func TestDeleteAccountConversationMembershipCleanup(t *testing.T) {
+	clearTestData()
+
+	user1ID, _ := testAuthSvc.Register("delacct_user1", "password123")
+	user2ID, _ := testAuthSvc.Register("delacct_user2", "password123")
+	token1, _ := testAuthSvc.GenerateToken(user1ID, "delacct_user1")
+
+	convID := insertDirectConversation(t, user1ID, user2ID)
+
+	orphanResult, err := testDB.Exec("INSERT INTO conversations DEFAULT VALUES")
+	if err != nil {
+		t.Fatalf("Failed to create orphan candidate conversation: %v", err)
+	}
+	orphanConvID, _ := orphanResult.LastInsertId()
+	if _, err := testDB.Exec(
+		"INSERT INTO conversation_participants (conversation_id, user_id) VALUES (?, ?)",
+		orphanConvID, user1ID,
+	); err != nil {
+		t.Fatalf("Failed to attach orphan candidate participant: %v", err)
+	}
+
+	avatarFile := filepath.Join(testUploadDir, "delacct-avatar.png")
+	if err := os.WriteFile(avatarFile, []byte("avatar"), 0o644); err != nil {
+		t.Fatalf("Failed to create avatar fixture: %v", err)
+	}
+	if _, err := testDB.Exec("UPDATE users SET avatar_url = ? WHERE id = ?", "/api/files/delacct-avatar.png", user1ID); err != nil {
+		t.Fatalf("Failed to set avatar url: %v", err)
+	}
+
+	messageResult, err := testDB.Exec(`
+		INSERT INTO messages (sender_id, receiver_id, content, status)
+		VALUES (?, ?, ?, 'sent')
+	`, user1ID, user2ID, "delete account test")
+	if err != nil {
+		t.Fatalf("Failed to insert message: %v", err)
+	}
+	messageID, _ := messageResult.LastInsertId()
+
+	filePath := filepath.Join(testUploadDir, "delete-account.txt")
+	if err := os.WriteFile(filePath, []byte("test"), 0o644); err != nil {
+		t.Fatalf("Failed to create upload fixture: %v", err)
+	}
+	if _, err := testDB.Exec(`
+		INSERT INTO files (message_id, file_name, file_path, file_size, content_type)
+		VALUES (?, ?, ?, ?, ?)
+	`, messageID, "delete-account.txt", filePath, 4, "text/plain"); err != nil {
+		t.Fatalf("Failed to insert file record: %v", err)
+	}
+
+	req := httptest.NewRequest("DELETE", "/api/profile", nil)
+	req.Header.Set("Authorization", "Bearer "+token1)
+	w := httptest.NewRecorder()
+
+	testRouter.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("DeleteAccount() status = %d, want 200", w.Code)
+	}
+
+	var count int
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM users WHERE id = ?", user1ID).Scan(&count); err != nil {
+		t.Fatalf("Failed to check user delete: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Expected user to be deleted, got count=%d", count)
+	}
+
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM conversation_participants WHERE user_id = ?", user1ID).Scan(&count); err != nil {
+		t.Fatalf("Failed to check membership cleanup: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Expected user memberships to be deleted, got count=%d", count)
+	}
+
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM conversations WHERE id = ?", orphanConvID).Scan(&count); err != nil {
+		t.Fatalf("Failed to check orphan conversation cleanup: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Expected orphan conversation to be deleted, got count=%d", count)
+	}
+
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM conversations WHERE id = ?", convID).Scan(&count); err != nil {
+		t.Fatalf("Failed to check retained conversation: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("Expected non-orphan conversation to remain, got count=%d", count)
+	}
+
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM conversation_participants WHERE conversation_id = ? AND user_id = ?", convID, user2ID).Scan(&count); err != nil {
+		t.Fatalf("Failed to check remaining participant: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("Expected participant user2 to remain, got count=%d", count)
+	}
+
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM messages WHERE sender_id = ? OR receiver_id = ?", user1ID, user1ID).Scan(&count); err != nil {
+		t.Fatalf("Failed to check messages cleanup: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Expected user messages to be deleted, got count=%d", count)
+	}
+
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM files").Scan(&count); err != nil {
+		t.Fatalf("Failed to check files cleanup: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("Expected user files to be deleted, got count=%d", count)
+	}
+
+	if _, err := os.Stat(filePath); !os.IsNotExist(err) {
+		t.Fatalf("Expected uploaded file to be removed, err=%v", err)
+	}
+	if _, err := os.Stat(avatarFile); !os.IsNotExist(err) {
+		t.Fatalf("Expected avatar file to be removed, err=%v", err)
 	}
 }

@@ -77,9 +77,17 @@ func (db *DB) migrate() error {
 
 	CREATE TABLE IF NOT EXISTS conversations (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		participants TEXT NOT NULL,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+
+	CREATE TABLE IF NOT EXISTS conversation_participants (
+		conversation_id INTEGER NOT NULL,
+		user_id INTEGER NOT NULL,
+		joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (conversation_id, user_id),
+		FOREIGN KEY (conversation_id) REFERENCES conversations(id),
+		FOREIGN KEY (user_id) REFERENCES users(id)
 	);
 
 	CREATE TABLE IF NOT EXISTS messages (
@@ -112,7 +120,8 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_messages_unread ON messages(receiver_id, sender_id, read_at);
 	CREATE INDEX IF NOT EXISTS idx_files_message_id ON files(message_id);
 	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
-	CREATE INDEX IF NOT EXISTS idx_conversations_participants ON conversations(participants);
+	CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON conversation_participants(user_id);
+	CREATE INDEX IF NOT EXISTS idx_conversation_participants_conversation_id ON conversation_participants(conversation_id);
 	`
 
 	_, err := db.conn.Exec(schema)

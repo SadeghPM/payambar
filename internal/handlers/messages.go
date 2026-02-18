@@ -148,12 +148,24 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 	currentUserID := userID.(int)
 
 	// Ensure conversation exists to prevent stale UI states
-	pattern1 := strconv.Itoa(currentUserID) + "," + strconv.Itoa(otherUserID)
-	pattern2 := strconv.Itoa(otherUserID) + "," + strconv.Itoa(currentUserID)
 	var convExists bool
 	if err := h.db.QueryRow(
-		"SELECT EXISTS(SELECT 1 FROM conversations WHERE participants = ? OR participants = ?)",
-		pattern1, pattern2,
+		`
+		SELECT EXISTS(
+			SELECT 1
+			FROM conversations c
+			INNER JOIN conversation_participants cp1
+				ON cp1.conversation_id = c.id AND cp1.user_id = ?
+			INNER JOIN conversation_participants cp2
+				ON cp2.conversation_id = c.id AND cp2.user_id = ?
+			WHERE (
+				SELECT COUNT(*)
+				FROM conversation_participants cp
+				WHERE cp.conversation_id = c.id
+			) = 2
+		)
+		`,
+		currentUserID, otherUserID,
 	).Scan(&convExists); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to check conversation")})
 		return
@@ -222,50 +234,54 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 	var conversations []*ConversationPreview
 
 	// Optimized approach: Fetch conversations for this user, then batch-load related data
-	// Step 1: Get user's conversations in one query
+	// Step 1: Get user's direct conversations in one query
 	rows, err := h.db.Query(`
-		SELECT id, participants FROM conversations 
-		WHERE participants LIKE ? OR participants LIKE ?
-	`, strconv.Itoa(currentUserID)+",%", "%,"+strconv.Itoa(currentUserID))
+		SELECT c.id, other.user_id
+		FROM conversations c
+		INNER JOIN conversation_participants me
+			ON me.conversation_id = c.id AND me.user_id = ?
+		INNER JOIN conversation_participants other
+			ON other.conversation_id = c.id AND other.user_id != ?
+		WHERE (
+			SELECT COUNT(*)
+			FROM conversation_participants cp
+			WHERE cp.conversation_id = c.id
+		) = 2
+	`, currentUserID, currentUserID)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch conversations")})
 		return
 	}
+	defer rows.Close()
 
 	type convData struct {
 		id           int
-		participants string
+		participants []int
 		otherUserID  int
 	}
 	var userConvs []convData
 	var otherUserIDs []int
+	seenOtherUsers := make(map[int]struct{})
 
 	for rows.Next() {
 		var cd convData
-		if err := rows.Scan(&cd.id, &cd.participants); err != nil {
+		if err := rows.Scan(&cd.id, &cd.otherUserID); err != nil {
 			continue
 		}
-
-		// Parse participants to find the other user
-		parts := strings.Split(cd.participants, ",")
-		for _, p := range parts {
-			pid, err := strconv.Atoi(strings.TrimSpace(p))
-			if err != nil {
-				continue
-			}
-			if pid != currentUserID {
-				cd.otherUserID = pid
-				break
-			}
-		}
-
 		if cd.otherUserID > 0 {
+			cd.participants = []int{currentUserID, cd.otherUserID}
 			userConvs = append(userConvs, cd)
-			otherUserIDs = append(otherUserIDs, cd.otherUserID)
+			if _, seen := seenOtherUsers[cd.otherUserID]; !seen {
+				seenOtherUsers[cd.otherUserID] = struct{}{}
+				otherUserIDs = append(otherUserIDs, cd.otherUserID)
+			}
 		}
 	}
-	rows.Close()
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch conversations")})
+		return
+	}
 
 	if len(userConvs) == 0 {
 		c.JSON(http.StatusOK, gin.H{"conversations": []*ConversationPreview{}})
@@ -328,23 +344,13 @@ func (h *MessageHandler) GetConversations(c *gin.Context) {
 			WHERE receiver_id = ? AND sender_id = ? AND read_at IS NULL
 		`, currentUserID, cd.otherUserID).Scan(&unreadCount)
 
-		// Parse participants for response
-		parts := strings.Split(cd.participants, ",")
-		var participantIDs []int
-		for _, p := range parts {
-			pid, _ := strconv.Atoi(strings.TrimSpace(p))
-			if pid > 0 {
-				participantIDs = append(participantIDs, pid)
-			}
-		}
-
 		conv := &ConversationPreview{
 			ID:           cd.id,
 			UserID:       cd.otherUserID,
 			Username:     userInfo.username,
 			IsOnline:     h.onlineChecker != nil && h.onlineChecker.IsUserOnline(cd.otherUserID),
 			UnreadCount:  unreadCount,
-			Participants: participantIDs,
+			Participants: cd.participants,
 		}
 
 		if userInfo.displayName.Valid {
@@ -642,17 +648,22 @@ func (h *MessageHandler) CreateConversation(c *gin.Context) {
 		return
 	}
 
-	// Check if conversation already exists by checking both participant orderings
+	// Check if direct conversation already exists between these two users
 	currentUID := userID.(int)
-	pattern1 := strconv.Itoa(currentUID) + "," + strconv.Itoa(req.ParticipantID)
-	pattern2 := strconv.Itoa(req.ParticipantID) + "," + strconv.Itoa(currentUID)
-
 	var existingID int
 	err = h.db.QueryRow(`
-		SELECT id FROM conversations 
-		WHERE participants = ? OR participants = ?
+		SELECT cp1.conversation_id
+		FROM conversation_participants cp1
+		INNER JOIN conversation_participants cp2
+			ON cp2.conversation_id = cp1.conversation_id AND cp2.user_id = ?
+		WHERE cp1.user_id = ?
+			AND (
+				SELECT COUNT(*)
+				FROM conversation_participants cp
+				WHERE cp.conversation_id = cp1.conversation_id
+			) = 2
 		LIMIT 1
-	`, pattern1, pattern2).Scan(&existingID)
+	`, req.ParticipantID, currentUID).Scan(&existingID)
 
 	if err == nil {
 		// Conversation already exists - get username
@@ -669,12 +680,27 @@ func (h *MessageHandler) CreateConversation(c *gin.Context) {
 		})
 		return
 	}
+	if err != sql.ErrNoRows {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to check conversation")})
+		return
+	}
 
 	// Create new conversation
-	participants := strconv.Itoa(userID.(int)) + "," + strconv.Itoa(req.ParticipantID)
-	result, err := h.db.Exec(`
-		INSERT INTO conversations (participants) VALUES (?)
-	`, participants)
+	tx, err := h.db.Begin()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to start transaction")})
+		return
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	result, err := tx.Exec(`
+		INSERT INTO conversations DEFAULT VALUES
+	`)
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to create conversation")})
@@ -682,7 +708,21 @@ func (h *MessageHandler) CreateConversation(c *gin.Context) {
 	}
 
 	id, _ := result.LastInsertId()
-	participantIDs := []int{userID.(int), req.ParticipantID}
+	participantIDs := []int{currentUID, req.ParticipantID}
+
+	if _, err = tx.Exec(`
+		INSERT INTO conversation_participants (conversation_id, user_id)
+		VALUES (?, ?), (?, ?)
+	`, id, currentUID, id, req.ParticipantID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to create conversation")})
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to create conversation")})
+		return
+	}
+	committed = true
 
 	// Get username for the response
 	var username string
@@ -727,23 +767,22 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 		}
 	}()
 
-	var participantsStr string
-	err = tx.QueryRow("SELECT participants FROM conversations WHERE id = ?", convID).Scan(&participantsStr)
+	rows, err := tx.Query("SELECT user_id FROM conversation_participants WHERE conversation_id = ?", convID)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": __("conversation not found")})
-			return
-		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch conversation")})
 		return
 	}
+	defer rows.Close()
 
-	parts := strings.Split(participantsStr, ",")
-	participantIDs := make([]int, 0, len(parts))
+	participantIDs := make([]int, 0, 4)
 	hasCurrent := false
-	for _, p := range parts {
-		pid, err := strconv.Atoi(strings.TrimSpace(p))
-		if err != nil || pid <= 0 {
+	for rows.Next() {
+		var pid int
+		if err := rows.Scan(&pid); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch conversation")})
+			return
+		}
+		if pid <= 0 {
 			continue
 		}
 		participantIDs = append(participantIDs, pid)
@@ -751,17 +790,32 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 			hasCurrent = true
 		}
 	}
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch conversation")})
+		return
+	}
+
+	if len(participantIDs) == 0 {
+		var convExists bool
+		if err := tx.QueryRow("SELECT EXISTS(SELECT 1 FROM conversations WHERE id = ?)", convID).Scan(&convExists); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch conversation")})
+			return
+		}
+		if !convExists {
+			c.JSON(http.StatusNotFound, gin.H{"error": __("conversation not found")})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid participants")})
+		return
+	}
 
 	if !hasCurrent {
 		c.JSON(http.StatusForbidden, gin.H{"error": __("not a participant")})
 		return
 	}
-	if len(participantIDs) < 2 {
+	if len(participantIDs) != 2 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid participants")})
 		return
-	}
-	if len(participantIDs) > 2 {
-		participantIDs = participantIDs[:2]
 	}
 
 	p1 := participantIDs[0]
@@ -802,6 +856,12 @@ func (h *MessageHandler) DeleteConversation(c *gin.Context) {
 	`, p1, p2, p2, p1)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete messages")})
+		return
+	}
+
+	_, err = tx.Exec("DELETE FROM conversation_participants WHERE conversation_id = ?", convID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete conversation")})
 		return
 	}
 
@@ -1067,9 +1127,20 @@ func (h *MessageHandler) DeleteAccount(c *gin.Context) {
 		return
 	}
 
-	pattern1 := strconv.Itoa(currentUserID) + ",%"
-	pattern2 := "%," + strconv.Itoa(currentUserID)
-	_, err = tx.Exec("DELETE FROM conversations WHERE participants LIKE ? OR participants LIKE ?", pattern1, pattern2)
+	_, err = tx.Exec("DELETE FROM conversation_participants WHERE user_id = ?", currentUserID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete conversations")})
+		return
+	}
+
+	_, err = tx.Exec(`
+		DELETE FROM conversations
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM conversation_participants cp
+			WHERE cp.conversation_id = conversations.id
+		)
+	`)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to delete conversations")})
 		return

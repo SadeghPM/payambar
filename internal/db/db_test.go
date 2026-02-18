@@ -81,3 +81,49 @@ func TestWALModeWithFile(t *testing.T) {
 		t.Errorf("Expected journal_mode to be 'wal' for file database, got: %s", journalMode)
 	}
 }
+
+func TestConversationParticipantsSchema(t *testing.T) {
+	tmpDB := t.TempDir() + "/test.db"
+
+	db, err := New(tmpDB)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	defer db.Close()
+
+	var tableExists int
+	err = db.conn.QueryRow(`
+		SELECT COUNT(*) FROM sqlite_master
+		WHERE type = 'table' AND name = 'conversation_participants'
+	`).Scan(&tableExists)
+	if err != nil {
+		t.Fatalf("Failed to inspect schema: %v", err)
+	}
+	if tableExists != 1 {
+		t.Fatalf("Expected conversation_participants table to exist")
+	}
+
+	var idxUserExists int
+	err = db.conn.QueryRow(`
+		SELECT COUNT(*) FROM sqlite_master
+		WHERE type = 'index' AND name = 'idx_conversation_participants_user_id'
+	`).Scan(&idxUserExists)
+	if err != nil {
+		t.Fatalf("Failed to inspect user index: %v", err)
+	}
+	if idxUserExists != 1 {
+		t.Fatalf("Expected idx_conversation_participants_user_id index to exist")
+	}
+
+	var idxConvExists int
+	err = db.conn.QueryRow(`
+		SELECT COUNT(*) FROM sqlite_master
+		WHERE type = 'index' AND name = 'idx_conversation_participants_conversation_id'
+	`).Scan(&idxConvExists)
+	if err != nil {
+		t.Fatalf("Failed to inspect conversation index: %v", err)
+	}
+	if idxConvExists != 1 {
+		t.Fatalf("Expected idx_conversation_participants_conversation_id index to exist")
+	}
+}

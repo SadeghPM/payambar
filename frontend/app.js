@@ -77,6 +77,8 @@ const app = createApp({
             wsReconnectAttempts: 0,
             wsMaxReconnectAttempts: 5,
             wsReconnectDelay: 3000,
+            wsReconnectTimer: null,
+            wsIntentionalClose: false,
             authTab: 'login',
             login: { username: '', password: '' },
             register: { username: '', password: '', confirm: '' },
@@ -443,6 +445,7 @@ const app = createApp({
             }
         },
         setAuth(data) {
+            this.closeWebSocket(true);
             this.token = data.token;
             this.userId = data.user_id;
             this.username = data.username;
@@ -477,15 +480,13 @@ const app = createApp({
             this.cleanupVoiceRecorder();
             this.conversationMenu = { show: false, x: 0, y: 0, conversation: null };
             this.serverOffline = false;
+            this.wsReconnectAttempts = 0;
             if (this.newChatSearchTimeout) {
                 clearTimeout(this.newChatSearchTimeout);
                 this.newChatSearchTimeout = null;
             }
             localStorage.clear();
-            if (this.ws) {
-                try { this.ws.close(); } catch (e) { }
-                this.ws = null;
-            }
+            this.closeWebSocket(true);
         },
         handleLogout() {
             if (confirm('آیا از خروج اطمینان دارید؟')) {
@@ -1026,8 +1027,36 @@ const app = createApp({
             this.currentConversationIsOnline = false;
             this.chatListOpen = true;
         },
+        closeWebSocket(intentional = true) {
+            this.wsIntentionalClose = intentional;
+            if (this.wsReconnectTimer) {
+                clearTimeout(this.wsReconnectTimer);
+                this.wsReconnectTimer = null;
+            }
+            if (this.ws) {
+                try { this.ws.close(); } catch (e) { }
+                this.ws = null;
+            }
+            if (intentional) {
+                this.wsReconnectAttempts = 0;
+                this.serverOffline = false;
+            }
+        },
         connectWebSocket() {
-            const wsUrlWithToken = `${WS_URL}?token=${encodeURIComponent(this.token)}`;
+            const token = this.token;
+            const isTokenValid = typeof token === 'string' && token && token !== 'undefined' && token !== 'null';
+            if (!this.isAuthed || !isTokenValid) {
+                return;
+            }
+            if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+                return;
+            }
+            if (this.wsReconnectTimer) {
+                clearTimeout(this.wsReconnectTimer);
+                this.wsReconnectTimer = null;
+            }
+            this.wsIntentionalClose = false;
+            const wsUrlWithToken = `${WS_URL}?token=${encodeURIComponent(token)}`;
             this.ws = new WebSocket(wsUrlWithToken);
 
             this.ws.onopen = () => {
@@ -1045,15 +1074,27 @@ const app = createApp({
             };
 
             this.ws.onerror = (err) => {
+                if (!this.isAuthed || this.wsIntentionalClose) {
+                    return;
+                }
                 console.error('WebSocket error:', err);
                 this.serverOffline = true;
             };
 
             this.ws.onclose = () => {
+                const isIntentional = this.wsIntentionalClose || !this.isAuthed;
+                this.ws = null;
+                if (isIntentional) {
+                    this.wsIntentionalClose = false;
+                    return;
+                }
                 this.serverOffline = true;
-                if (this.wsReconnectAttempts < this.wsMaxReconnectAttempts) {
+                if (this.wsReconnectAttempts < this.wsMaxReconnectAttempts && this.isAuthed) {
                     this.wsReconnectAttempts++;
-                    setTimeout(() => this.connectWebSocket(), this.wsReconnectDelay);
+                    this.wsReconnectTimer = setTimeout(() => {
+                        this.wsReconnectTimer = null;
+                        this.connectWebSocket();
+                    }, this.wsReconnectDelay);
                 }
             };
         },
