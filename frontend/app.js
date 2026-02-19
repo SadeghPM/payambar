@@ -146,6 +146,15 @@ const app = createApp({
             callTimer: null,
             callStartTime: null,
             audioEnabled: true,
+            e2ee: {
+                enabled: true,
+                ready: false,
+                deviceId: '',
+                keyId: '',
+                privateJwk: null,
+                publicJwk: null,
+                recipientKeys: {},
+            },
         };
     },
     computed: {
@@ -179,6 +188,7 @@ const app = createApp({
         if (this.isAuthed) {
             this.loadConversations();
             this.loadMyProfile();
+            this.ensureE2EEReady().catch((err) => console.warn('E2EE init skipped:', err));
             this.connectWebSocket();
             this.fetchWebRTCConfig();
         }
@@ -226,6 +236,153 @@ const app = createApp({
                 localStorage.clear();
                 console.log('localStorage cleared - no valid auth data');
             }
+        },
+
+        utf8ToBase64Url(value) {
+            const bytes = new TextEncoder().encode(value);
+            return this.bytesToBase64Url(bytes);
+        },
+        base64UrlToUtf8(value) {
+            const bytes = this.base64UrlToBytes(value);
+            return new TextDecoder().decode(bytes);
+        },
+        bytesToBase64Url(bytes) {
+            let binary = '';
+            bytes.forEach((b) => { binary += String.fromCharCode(b); });
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+        },
+        base64UrlToBytes(value) {
+            const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4);
+            const binary = atob(base64);
+            const out = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+            return out;
+        },
+        async ensureE2EEReady() {
+            if (!this.e2ee.enabled || !window.crypto?.subtle || !this.token || !this.userId) return false;
+            if (this.e2ee.ready && this.e2ee.privateJwk && this.e2ee.publicJwk) return true;
+
+            const storagePrefix = `payambar:e2ee:${this.userId}`;
+            const storedPrivate = localStorage.getItem(`${storagePrefix}:private_jwk`);
+            const storedPublic = localStorage.getItem(`${storagePrefix}:public_jwk`);
+            const storedDeviceId = localStorage.getItem(`${storagePrefix}:device_id`);
+            const storedKeyId = localStorage.getItem(`${storagePrefix}:key_id`);
+
+            if (storedPrivate && storedPublic && storedDeviceId && storedKeyId) {
+                this.e2ee.privateJwk = JSON.parse(storedPrivate);
+                this.e2ee.publicJwk = JSON.parse(storedPublic);
+                this.e2ee.deviceId = storedDeviceId;
+                this.e2ee.keyId = storedKeyId;
+            } else {
+                const keyPair = await window.crypto.subtle.generateKey(
+                    { name: 'ECDH', namedCurve: 'P-256' },
+                    true,
+                    ['deriveBits']
+                );
+                const privateJwk = await window.crypto.subtle.exportKey('jwk', keyPair.privateKey);
+                const publicJwk = await window.crypto.subtle.exportKey('jwk', keyPair.publicKey);
+                const deviceId = (window.crypto.randomUUID ? window.crypto.randomUUID() : `web-${Date.now()}`);
+                const keyId = `k-${Date.now()}`;
+                localStorage.setItem(`${storagePrefix}:private_jwk`, JSON.stringify(privateJwk));
+                localStorage.setItem(`${storagePrefix}:public_jwk`, JSON.stringify(publicJwk));
+                localStorage.setItem(`${storagePrefix}:device_id`, deviceId);
+                localStorage.setItem(`${storagePrefix}:key_id`, keyId);
+                this.e2ee.privateJwk = privateJwk;
+                this.e2ee.publicJwk = publicJwk;
+                this.e2ee.deviceId = deviceId;
+                this.e2ee.keyId = keyId;
+            }
+
+            const res = await fetch(`${API_URL}/keys/devices`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
+                body: JSON.stringify({
+                    device_id: this.e2ee.deviceId,
+                    algorithm: 'ECDH-P256',
+                    public_key: this.utf8ToBase64Url(JSON.stringify(this.e2ee.publicJwk)),
+                    key_id: this.e2ee.keyId,
+                }),
+            });
+            if (!res.ok) return false;
+            this.e2ee.ready = true;
+            return true;
+        },
+        async getRecipientDeviceKey(userId) {
+            if (this.e2ee.recipientKeys[userId]) return this.e2ee.recipientKeys[userId];
+            const res = await fetch(`${API_URL}/keys/users/${userId}/devices`, {
+                headers: { Authorization: `Bearer ${this.token}` },
+            });
+            if (!res.ok) return null;
+            const data = await res.json();
+            const device = (data.devices || []).find((d) => (d.algorithm || '').toUpperCase() === 'ECDH-P256');
+            if (!device?.public_key) return null;
+            this.e2ee.recipientKeys[userId] = device;
+            return device;
+        },
+        async deriveAesKeyFromDevice(device) {
+            const privateKey = await window.crypto.subtle.importKey(
+                'jwk',
+                this.e2ee.privateJwk,
+                { name: 'ECDH', namedCurve: 'P-256' },
+                false,
+                ['deriveBits']
+            );
+            const publicJwk = JSON.parse(this.base64UrlToUtf8(device.public_key));
+            const recipientPublicKey = await window.crypto.subtle.importKey(
+                'jwk',
+                publicJwk,
+                { name: 'ECDH', namedCurve: 'P-256' },
+                false,
+                []
+            );
+            const bits = await window.crypto.subtle.deriveBits(
+                { name: 'ECDH', public: recipientPublicKey },
+                privateKey,
+                256
+            );
+            return window.crypto.subtle.importKey('raw', bits, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+        },
+        async encryptTextMessage(receiverId, plainText) {
+            const ready = await this.ensureE2EEReady();
+            if (!ready) return null;
+            const device = await this.getRecipientDeviceKey(receiverId);
+            if (!device) return null;
+            const aesKey = await this.deriveAesKeyFromDevice(device);
+            const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+            const encoded = new TextEncoder().encode(plainText);
+            const encryptedBuffer = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBytes }, aesKey, encoded);
+            return {
+                encrypted: true,
+                e2ee_v: 1,
+                alg: 'AES-256-GCM',
+                sender_device_id: this.e2ee.deviceId,
+                key_id: this.e2ee.keyId,
+                iv: this.bytesToBase64Url(ivBytes),
+                ciphertext: this.bytesToBase64Url(new Uint8Array(encryptedBuffer)),
+            };
+        },
+        async maybeDecryptMessage(msg) {
+            if (!msg?.encrypted || !msg?.ciphertext || !msg?.iv) return msg;
+            try {
+                const peerId = Number(msg.sender_id) === Number(this.userId) ? Number(msg.receiver_id) : Number(msg.sender_id);
+                const device = await this.getRecipientDeviceKey(peerId);
+                if (!device) return { ...msg, content: '🔒 پیام رمزنگاری شده' };
+                const aesKey = await this.deriveAesKeyFromDevice(device);
+                const plaintextBuffer = await window.crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv: this.base64UrlToBytes(msg.iv) },
+                    aesKey,
+                    this.base64UrlToBytes(msg.ciphertext)
+                );
+                const content = new TextDecoder().decode(plaintextBuffer);
+                return { ...msg, content };
+            } catch (err) {
+                console.warn('Decrypt failed', err);
+                return { ...msg, content: '🔒 پیام رمزنگاری شده (قابل خواندن نیست)' };
+            }
+        },
+        async decryptMessageList(messages) {
+            if (!Array.isArray(messages) || messages.length === 0) return [];
+            return Promise.all(messages.map((m) => this.maybeDecryptMessage(m)));
         },
         formatDate(value) {
             if (!value) return '';
@@ -670,7 +827,7 @@ const app = createApp({
                     throw new Error('Failed to load messages');
                 }
                 const data = await res.json();
-                this.messages[conv.user_id] = data.messages || [];
+                this.messages[conv.user_id] = await this.decryptMessageList(data.messages || []);
                 // If we got 50 messages, there might be more
                 this.hasMoreMessages[conv.user_id] = (data.messages || []).length >= 50;
 
@@ -722,11 +879,20 @@ const app = createApp({
             this.messageText = '';
             this.chatListOpen = false;
 
+            const encryptedPayload = await this.encryptTextMessage(this.currentConversationId, content);
+            if (this.e2ee.enabled && !encryptedPayload) {
+                const idx = this.messages[this.currentConversationId].findIndex((m) => m.client_message_id === clientMessageId);
+                if (idx >= 0) this.messages[this.currentConversationId].splice(idx, 1);
+                this.updateConversationLastMessage(this.currentConversationId);
+                alert('ارسال امن ممکن نیست؛ کلید مخاطب در دسترس نیست.');
+                return;
+            }
             this.ws.send(JSON.stringify({
                 type: 'message',
                 receiver_id: this.currentConversationId,
-                content,
+                content: encryptedPayload ? '' : content,
                 client_message_id: clientMessageId,
+                ...(encryptedPayload || {}),
             }));
             this.$nextTick(() => this.scrollToBottom());
         },
@@ -921,7 +1087,7 @@ const app = createApp({
                 }
 
                 const data = await res.json();
-                const olderMessages = data.messages || [];
+                const olderMessages = await this.decryptMessageList(data.messages || []);
 
                 if (olderMessages.length > 0) {
                     // Prepend older messages to existing ones
@@ -1005,7 +1171,7 @@ const app = createApp({
                 }
 
                 const data = await res.json();
-                this.messages[this.currentConversationId] = data.messages || [];
+                this.messages[this.currentConversationId] = await this.decryptMessageList(data.messages || []);
                 this.hasMoreMessages[this.currentConversationId] = (data.messages || []).length >= 50;
 
                 const latestMessage = this.messages[this.currentConversationId].length
@@ -1111,7 +1277,7 @@ const app = createApp({
                 }
             };
         },
-        handleWebSocketMessage(data) {
+        async handleWebSocketMessage(data) {
             if (data.type === 'call_offer') {
                 if (this.activeCall || this.incomingCall || this.outgoingCall) {
                     this.ws.send(JSON.stringify({ type: 'call_reject', receiver_id: data.sender_id, payload: { reason: 'busy' } }));
@@ -1148,6 +1314,8 @@ const app = createApp({
                     this.endCall(false);
                 }
             } else if (data.type === 'message') {
+                const normalizedMessage = await this.maybeDecryptMessage(data);
+                const incomingContent = normalizedMessage.content;
                 const convUser = data.sender_id === this.userId ? data.receiver_id : data.sender_id;
                 if (!this.messages[convUser]) this.messages[convUser] = [];
                 const incomingID = Number(data.message_id);
@@ -1178,13 +1346,21 @@ const app = createApp({
                             id: data.message_id,
                             sender_id: data.sender_id,
                             receiver_id: data.receiver_id,
-                            content: data.content,
+                            content: incomingContent,
                             status: data.status,
                             created_at: data.created_at,
                             client_message_id: data.client_message_id,
                             file_name: data.file_name,
                             file_url: data.file_url,
                             file_content_type: data.file_content_type,
+                            encrypted: !!data.encrypted,
+                            e2ee_v: data.e2ee_v,
+                            alg: data.alg,
+                            sender_device_id: data.sender_device_id,
+                            key_id: data.key_id,
+                            iv: data.iv,
+                            ciphertext: data.ciphertext,
+                            aad: data.aad,
                         });
                     }
                 } else {
@@ -1201,12 +1377,20 @@ const app = createApp({
                             id: data.message_id,
                             sender_id: data.sender_id,
                             receiver_id: data.receiver_id,
-                            content: data.content,
+                            content: incomingContent,
                             status: data.status,
                             created_at: data.created_at,
                             file_name: data.file_name,
                             file_url: data.file_url,
                             file_content_type: data.file_content_type,
+                            encrypted: !!data.encrypted,
+                            e2ee_v: data.e2ee_v,
+                            alg: data.alg,
+                            sender_device_id: data.sender_device_id,
+                            key_id: data.key_id,
+                            iv: data.iv,
+                            ciphertext: data.ciphertext,
+                            aad: data.aad,
                         });
                     }
                 }

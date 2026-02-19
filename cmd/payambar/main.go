@@ -232,6 +232,8 @@ func runServer(cfg *config.Config) error {
 		// Messages
 		protected.GET("/messages", msgHandler.GetConversation)
 		protected.GET("/conversations", msgHandler.GetConversations)
+		protected.POST("/keys/devices", msgHandler.UpsertDeviceKey)
+		protected.GET("/keys/users/:id/devices", msgHandler.GetUserDeviceKeys)
 		protected.GET("/users", msgHandler.GetUsers)
 		protected.POST("/conversations", msgHandler.CreateConversation)
 		protected.DELETE("/conversations/:id", msgHandler.DeleteConversation)

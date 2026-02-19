@@ -95,6 +95,14 @@ func (db *DB) migrate() error {
 		sender_id INTEGER NOT NULL,
 		receiver_id INTEGER NOT NULL,
 		content TEXT NOT NULL,
+		encrypted INTEGER NOT NULL DEFAULT 0,
+		e2ee_v INTEGER,
+		alg TEXT,
+		sender_device_id TEXT,
+		key_id TEXT,
+		iv TEXT,
+		ciphertext TEXT,
+		aad TEXT,
 		status TEXT DEFAULT 'sent',
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 		delivered_at TIMESTAMP,
@@ -122,6 +130,19 @@ func (db *DB) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 	CREATE INDEX IF NOT EXISTS idx_conversation_participants_user_id ON conversation_participants(user_id);
 	CREATE INDEX IF NOT EXISTS idx_conversation_participants_conversation_id ON conversation_participants(conversation_id);
+
+	CREATE TABLE IF NOT EXISTS user_device_keys (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		device_id TEXT NOT NULL,
+		algorithm TEXT NOT NULL,
+		public_key TEXT NOT NULL,
+		key_id TEXT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		revoked_at TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id)
+	);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_user_device_keys_unique ON user_device_keys(user_id, device_id, key_id);
 	`
 
 	_, err := db.conn.Exec(schema)
@@ -132,6 +153,16 @@ func (db *DB) migrate() error {
 	// Add display_name and avatar_url columns if they don't exist (migration for existing databases)
 	db.conn.Exec("ALTER TABLE users ADD COLUMN display_name TEXT")
 	db.conn.Exec("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+
+	// E2EE-compatible message columns (safe on existing DBs; duplicate-column errors ignored)
+	db.conn.Exec("ALTER TABLE messages ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0")
+	db.conn.Exec("ALTER TABLE messages ADD COLUMN e2ee_v INTEGER")
+	db.conn.Exec("ALTER TABLE messages ADD COLUMN alg TEXT")
+	db.conn.Exec("ALTER TABLE messages ADD COLUMN sender_device_id TEXT")
+	db.conn.Exec("ALTER TABLE messages ADD COLUMN key_id TEXT")
+	db.conn.Exec("ALTER TABLE messages ADD COLUMN iv TEXT")
+	db.conn.Exec("ALTER TABLE messages ADD COLUMN ciphertext TEXT")
+	db.conn.Exec("ALTER TABLE messages ADD COLUMN aad TEXT")
 
 	return nil
 }
