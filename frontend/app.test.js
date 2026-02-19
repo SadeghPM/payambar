@@ -174,6 +174,10 @@ const AppLogic = {
             return true;
         }
         return false;
+    },
+
+    hasEncryptedEnvelope(msg) {
+        return !!(msg && msg.encrypted && msg.ciphertext && msg.iv && msg.e2ee_v);
     }
 };
 
@@ -333,6 +337,17 @@ function runTests() {
         { message_id: 789, status: 'sent' }
     );
     assert(!notReplaced, 'Returns false when client_message_id not found');
+
+    // E2EE Envelope Tests
+    console.log('\n--- E2EE Envelope Tests ---');
+    assert(
+        AppLogic.hasEncryptedEnvelope({ encrypted: true, ciphertext: 'abc', iv: 'def', e2ee_v: 1 }),
+        'Detects valid encrypted envelope'
+    );
+    assert(
+        !AppLogic.hasEncryptedEnvelope({ encrypted: true, ciphertext: 'abc' }),
+        'Rejects incomplete encrypted envelope'
+    );
     
     // MockWebSocket Tests
     console.log('\n--- MockWebSocket Tests ---');

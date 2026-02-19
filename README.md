@@ -123,6 +123,33 @@ sudo journalctl -u payambar -f
 - Tests: `make test`
 - Format: `make fmt`
 
+## Text E2EE (current status)
+Payambar now supports **text-message E2EE v1** (files/calls are not part of E2EE).
+
+### How to run with E2EE
+1. Start app in dev mode:
+```bash
+make dev
+```
+2. Open app in two browser sessions and register/login two users.
+3. Ensure both users have logged in at least once (this publishes each device public key).
+4. Start a conversation and send a text message.
+
+When E2EE is enabled in frontend, text send is blocked if recipient key is unavailable (no silent plaintext fallback).
+
+### How to verify ciphertext is stored
+With default dev DB (`./data/payambar.db`), run:
+```bash
+sqlite3 ./data/payambar.db "select id,sender_id,receiver_id,encrypted,e2ee_v,alg,length(ciphertext),length(content) from messages order by id desc limit 10;"
+```
+
+Expected encrypted rows should look like:
+- `encrypted = 1`
+- `e2ee_v = 1`
+- `alg = AES-256-GCM`
+- `length(ciphertext) > 0`
+- `length(content) = 0`
+
 ## Troubleshooting
 - **Service not up:** `sudo journalctl -u payambar -n 50`
 - **DB locked:** SQLite allows one writer; retry or migrate to Postgres for scale.
@@ -131,3 +158,6 @@ sudo journalctl -u payambar -f
 ---
 
 MIT License
+
+## E2EE planning
+- See `docs/e2ee-text-v1.md` for the proposed text-only E2EE v1 protocol and rollout plan.

@@ -32,6 +32,14 @@ func setupTestDB(t *testing.T) *sql.DB {
 			sender_id INTEGER NOT NULL,
 			receiver_id INTEGER NOT NULL,
 			content TEXT NOT NULL,
+			encrypted INTEGER NOT NULL DEFAULT 0,
+			e2ee_v INTEGER,
+			alg TEXT,
+			sender_device_id TEXT,
+			key_id TEXT,
+			iv TEXT,
+			ciphertext TEXT,
+			aad TEXT,
 			status TEXT DEFAULT 'sent',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			delivered_at TIMESTAMP,
@@ -330,6 +338,44 @@ func TestMessageSaveToDatabase(t *testing.T) {
 
 	if content != "Test message" {
 		t.Errorf("Expected 'Test message', got '%s'", content)
+	}
+}
+
+func TestHandleEncryptedMessageEvent(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	hub := NewHub(db)
+	go hub.Run()
+	time.Sleep(10 * time.Millisecond)
+
+	client := &Client{userID: 1, hub: hub, send: make(chan interface{}, 256)}
+	event := map[string]interface{}{
+		"type":             "message",
+		"receiver_id":      float64(2),
+		"encrypted":        true,
+		"e2ee_v":           float64(1),
+		"alg":              "AES-256-GCM",
+		"sender_device_id": "web-device-1",
+		"key_id":           "k-1",
+		"iv":               "iv-b64",
+		"ciphertext":       "cipher-b64",
+		"aad":              "aad-b64",
+	}
+
+	client.handleMessageEvent(event)
+
+	var encrypted int
+	var ciphertext, iv, alg string
+	err := db.QueryRow("SELECT encrypted, ciphertext, iv, alg FROM messages WHERE sender_id = 1 AND receiver_id = 2").Scan(&encrypted, &ciphertext, &iv, &alg)
+	if err != nil {
+		t.Fatalf("Failed to query encrypted message: %v", err)
+	}
+	if encrypted != 1 {
+		t.Fatalf("expected encrypted=1, got %d", encrypted)
+	}
+	if ciphertext != "cipher-b64" || iv != "iv-b64" || alg != "AES-256-GCM" {
+		t.Fatalf("unexpected envelope values: ciphertext=%s iv=%s alg=%s", ciphertext, iv, alg)
 	}
 }
 
