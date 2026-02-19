@@ -149,6 +149,7 @@ const app = createApp({
             e2ee: {
                 enabled: true,
                 ready: false,
+                ownerUserId: null,
                 deviceId: '',
                 keyId: '',
                 privateJwk: null,
@@ -260,7 +261,16 @@ const app = createApp({
         },
         async ensureE2EEReady() {
             if (!this.e2ee.enabled || !window.crypto?.subtle || !this.token || !this.userId) return false;
-            if (this.e2ee.ready && this.e2ee.privateJwk && this.e2ee.publicJwk) return true;
+            if (
+                this.e2ee.ready &&
+                this.e2ee.privateJwk &&
+                this.e2ee.publicJwk &&
+                Number(this.e2ee.ownerUserId) === Number(this.userId)
+            ) return true;
+
+            if (Number(this.e2ee.ownerUserId) !== Number(this.userId)) {
+                this.resetE2EEState();
+            }
 
             const storagePrefix = `payambar:e2ee:${this.userId}`;
             const storedPrivate = localStorage.getItem(`${storagePrefix}:private_jwk`);
@@ -273,6 +283,7 @@ const app = createApp({
                 this.e2ee.publicJwk = JSON.parse(storedPublic);
                 this.e2ee.deviceId = storedDeviceId;
                 this.e2ee.keyId = storedKeyId;
+                this.e2ee.ownerUserId = this.userId;
             } else {
                 const keyPair = await window.crypto.subtle.generateKey(
                     { name: 'ECDH', namedCurve: 'P-256' },
@@ -291,6 +302,7 @@ const app = createApp({
                 this.e2ee.publicJwk = publicJwk;
                 this.e2ee.deviceId = deviceId;
                 this.e2ee.keyId = keyId;
+                this.e2ee.ownerUserId = this.userId;
             }
 
             const res = await fetch(`${API_URL}/keys/devices`, {
@@ -307,17 +319,31 @@ const app = createApp({
             this.e2ee.ready = true;
             return true;
         },
-        async getRecipientDeviceKey(userId) {
+        async getUserDeviceKeys(userId) {
             if (this.e2ee.recipientKeys[userId]) return this.e2ee.recipientKeys[userId];
             const res = await fetch(`${API_URL}/keys/users/${userId}/devices`, {
                 headers: { Authorization: `Bearer ${this.token}` },
             });
-            if (!res.ok) return null;
+            if (!res.ok) return [];
             const data = await res.json();
-            const device = (data.devices || []).find((d) => (d.algorithm || '').toUpperCase() === 'ECDH-P256');
-            if (!device?.public_key) return null;
-            this.e2ee.recipientKeys[userId] = device;
-            return device;
+            const devices = (data.devices || []).filter((d) =>
+                (d.algorithm || '').toUpperCase() === 'ECDH-P256' && !!d.public_key
+            );
+            this.e2ee.recipientKeys[userId] = devices;
+            return devices;
+        },
+        async getRecipientDeviceKey(userId, { keyId = null, deviceId = null } = {}) {
+            const devices = await this.getUserDeviceKeys(userId);
+            if (!devices.length) return null;
+
+            if (keyId || deviceId) {
+                const matched = devices.find((d) =>
+                    (!keyId || d.key_id === keyId) && (!deviceId || d.device_id === deviceId)
+                );
+                if (matched) return matched;
+            }
+
+            return devices[0] || null;
         },
         async deriveAesKeyFromDevice(device) {
             const privateKey = await window.crypto.subtle.importKey(
@@ -364,8 +390,12 @@ const app = createApp({
         async maybeDecryptMessage(msg) {
             if (!msg?.encrypted || !msg?.ciphertext || !msg?.iv) return msg;
             try {
-                const peerId = Number(msg.sender_id) === Number(this.userId) ? Number(msg.receiver_id) : Number(msg.sender_id);
-                const device = await this.getRecipientDeviceKey(peerId);
+                const isOutgoing = Number(msg.sender_id) === Number(this.userId);
+                const peerId = isOutgoing ? Number(msg.receiver_id) : Number(msg.sender_id);
+                const device = await this.getRecipientDeviceKey(
+                    peerId,
+                    isOutgoing ? {} : { keyId: msg.key_id, deviceId: msg.sender_device_id }
+                );
                 if (!device) return { ...msg, content: '🔒 پیام رمزنگاری شده' };
                 const aesKey = await this.deriveAesKeyFromDevice(device);
                 const plaintextBuffer = await window.crypto.subtle.decrypt(
@@ -611,6 +641,9 @@ const app = createApp({
         },
         setAuth(data) {
             this.closeWebSocket(true);
+            if (Number(this.userId) !== Number(data.user_id)) {
+                this.resetE2EEState();
+            }
             this.token = data.token;
             this.userId = data.user_id;
             this.username = data.username;
@@ -621,7 +654,17 @@ const app = createApp({
             this.loadMyProfile();
             this.connectWebSocket();
         },
+        resetE2EEState() {
+            this.e2ee.ready = false;
+            this.e2ee.ownerUserId = null;
+            this.e2ee.deviceId = '';
+            this.e2ee.keyId = '';
+            this.e2ee.privateJwk = null;
+            this.e2ee.publicJwk = null;
+            this.e2ee.recipientKeys = {};
+        },
         clearAuth() {
+            this.resetE2EEState();
             this.token = null;
             this.userId = null;
             this.username = null;
