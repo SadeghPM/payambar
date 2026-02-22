@@ -22,6 +22,7 @@
                     <div class="auth-title">
                         <h1>PayamBar</h1>
                         <p class="auth-subtitle">پیام‌رسان ساده، سریع و امن</p>
+                        <p class="auth-badge">پیام‌رسان رمزنگاری‌شده</p>
                     </div>
                 </div>
                 <div class="auth-tabs">
@@ -32,22 +33,51 @@
                 <form v-if="authTab==='login'" class="auth-form" @submit.prevent="handleLogin">
                     <input type="text" v-model="login.username" placeholder="نام‌کاربری" required>
                     <input type="password" v-model="login.password" placeholder="رمز‌عبور" required>
-                    <button type="submit">ورود</button>
+                    <button type="submit">ورود امن</button>
                     <div class="error-message" v-if="authError">{{ authError }}</div>
+                    <div class="auth-hint">رمز عبور فقط برای باز کردن کلید رمزنگاری شما استفاده می‌شود و ذخیره نمی‌شود.</div>
                 </form>
 
                 <form v-else class="auth-form" @submit.prevent="handleRegister">
                     <input type="text" v-model="register.username" placeholder="نام‌کاربری" required>
                     <input type="password" v-model="register.password" placeholder="رمز‌عبور" required>
                     <input type="password" v-model="register.confirm" placeholder="تکرار رمز‌عبور" required>
-                    <button type="submit">ثبت‌نام</button>
+                    <button type="submit">ثبت‌نام با رمزنگاری</button>
                     <div class="error-message" v-if="authError">{{ authError }}</div>
+                    <div class="auth-hint">کلید خصوصی شما فقط رمزنگاری‌شده روی سرور پشتیبان‌گیری می‌شود تا در دستگاه‌های دیگر بازیابی شود.</div>
+                    <label class="rules-checkbox">
+                        <input type="checkbox" v-model="acceptRules">
+                        <span>قوانین و حریم خصوصی را می‌پذیرم</span>
+                    </label>
                 </form>
-                <div class="auth-footer">با ورود، قوانین و حریم خصوصی را می‌پذیرید.</div>
+                <div class="auth-footer">
+                    <button type="button" class="link-btn" @click="openRulesModal">مشاهده قوانین</button>
+                </div>
             </div>
         </div>
 
-        <div class="messenger-container" v-else>
+        <div v-if="showRulesModal" class="modal-backdrop" @click.self="closeRulesModal">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>قوانین استفاده و رمزنگاری</h3>
+                    <button class="icon-btn ghost" @click="closeRulesModal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <ul class="rules-list">
+                        <li>پیام‌ها بین کاربرانی که کلید دارند، به صورت سرتاسری (E2EE) رمزنگاری می‌شود.</li>
+                        <li>اگر طرف مقابل هنوز کلید منتشر نکرده باشد، پیام شما به‌صورت متن ساده ارسال می‌شود تا قابل خواندن بماند.</li>
+                        <li>کلید خصوصی فقط به شکل رمزنگاری‌شده روی سرور پشتیبان‌گیری می‌شود و بدون رمز عبور شما قابل استفاده نیست.</li>
+                        <li>مسئولیت محتوای پیام‌ها، تخلفات و عواقب حقوقی بر عهده فرستنده و دریافت‌کننده است؛ سرویس مسئولیتی ندارد.</li>
+                        <li>از ارسال هرگونه محتوای غیرقانونی، آزاردهنده یا نقض‌کننده حقوق دیگران خودداری کنید.</li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button class="primary-btn" @click="closeRulesModal">متوجه شدم</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="messenger-container" v-if="isAuthed">
             <!-- Chat List Panel -->
             <div class="chat-list-panel" :class="{'mobile-show': chatListOpen}">
                 <!-- User Profile Section -->

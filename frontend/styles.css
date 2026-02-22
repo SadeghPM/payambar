@@ -160,6 +160,43 @@ button {
     color: var(--muted);
     font-size: 0.95rem;
 }
+.auth-badge {
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    color: #2563eb;
+    background: #e8f0ff;
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.auth-footer {
+    margin-top: 1rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+}
+.rules-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.rules-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+}
+.auth-footer .link-btn {
+    border: none;
+    background: none;
+    color: #2563eb;
+    cursor: pointer;
+    font-weight: 600;
+    margin-right: 0.35rem;
+}
+.auth-footer .link-btn:hover {
+    text-decoration: underline;
+}
 
 .auth-tabs {
     display: grid;
@@ -230,6 +267,80 @@ button {
     color: #c53232;
     font-size: 0.9rem;
     margin-top: 0.25rem;
+}
+.auth-hint {
+    margin-top: -0.35rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+    line-height: 1.5;
+}
+
+/* Modal */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    padding: 1rem;
+}
+.modal-card {
+    background: #fff;
+    border-radius: 16px;
+    width: min(520px, 100%);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.15);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+.modal-header, .modal-footer {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid var(--border);
+}
+.modal-footer {
+    border-bottom: none;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+.modal-body {
+    padding: 1.25rem;
+    overflow-y: auto;
+    color: var(--ink);
+    line-height: 1.7;
+}
+.rules-list {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.rules-list li {
+    padding-left: 0.75rem;
+    position: relative;
+}
+.rules-list li::before {
+    content: '•';
+    position: absolute;
+    left: -0.35rem;
+    color: #2563eb;
+}
+.primary-btn {
+    background: #0f6d4f;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    padding: 0.65rem 1.2rem;
+    cursor: pointer;
+    font-weight: 600;
+}
+.primary-btn:hover {
+    background: #0b553d;
 }
 
 .auth-footer {

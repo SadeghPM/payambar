@@ -85,6 +85,8 @@ const app = createApp({
             register: { username: '', password: '', confirm: '' },
             authPassword: '',
             suppressBackupWarningOnce: false,
+            showRulesModal: false,
+            acceptRules: false,
             authError: '',
             chatListOpen: true,
             loadingMessages: false,
@@ -754,6 +756,10 @@ const app = createApp({
         },
         async handleRegister() {
             this.authError = '';
+            if (!this.acceptRules) {
+                this.authError = 'لطفاً قوانین را بپذیرید.';
+                return;
+            }
             if (this.register.password !== this.register.confirm) {
                 this.authError = 'رمز‌عبورها مطابقت ندارند';
                 return;
@@ -807,6 +813,7 @@ const app = createApp({
             this.token = null;
             this.userId = null;
             this.username = null;
+            this.acceptRules = false;
             this.authPassword = '';
             this.conversations = [];
             this.messages = {};
@@ -840,6 +847,12 @@ const app = createApp({
             if (confirm('آیا از خروج اطمینان دارید؟')) {
                 this.clearAuth();
             }
+        },
+        openRulesModal() {
+            this.showRulesModal = true;
+        },
+        closeRulesModal() {
+            this.showRulesModal = false;
         },
         async fetchWebRTCConfig() {
             try {
