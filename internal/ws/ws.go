@@ -29,20 +29,28 @@ type Client struct {
 }
 
 type MessageEvent struct {
-	Type        string                 `json:"type"` // "message", "status_update"
-	MessageID   int                    `json:"message_id,omitempty"`
-	ClientMsgID string                 `json:"client_message_id,omitempty"`
-	SenderID    int                    `json:"sender_id,omitempty"`
-	ReceiverID  int                    `json:"receiver_id,omitempty"`
-	Content     string                 `json:"content,omitempty"`
-	Status      string                 `json:"status,omitempty"`
-	CreatedAt   time.Time              `json:"created_at,omitempty"`
-	DeliveredAt *time.Time             `json:"delivered_at,omitempty"`
-	ReadAt      *time.Time             `json:"read_at,omitempty"`
-	FileName    string                 `json:"file_name,omitempty"`
-	FileURL     string                 `json:"file_url,omitempty"`
-	FileType    string                 `json:"file_content_type,omitempty"`
-	Payload     map[string]interface{} `json:"payload,omitempty"`
+	Type           string                 `json:"type"` // "message", "status_update"
+	MessageID      int                    `json:"message_id,omitempty"`
+	ClientMsgID    string                 `json:"client_message_id,omitempty"`
+	SenderID       int                    `json:"sender_id,omitempty"`
+	ReceiverID     int                    `json:"receiver_id,omitempty"`
+	Content        string                 `json:"content,omitempty"`
+	Encrypted      bool                   `json:"encrypted,omitempty"`
+	E2EEVersion    int                    `json:"e2ee_v,omitempty"`
+	Algorithm      string                 `json:"alg,omitempty"`
+	SenderDeviceID string                 `json:"sender_device_id,omitempty"`
+	KeyID          string                 `json:"key_id,omitempty"`
+	IV             string                 `json:"iv,omitempty"`
+	Ciphertext     string                 `json:"ciphertext,omitempty"`
+	AAD            string                 `json:"aad,omitempty"`
+	Status         string                 `json:"status,omitempty"`
+	CreatedAt      time.Time              `json:"created_at,omitempty"`
+	DeliveredAt    *time.Time             `json:"delivered_at,omitempty"`
+	ReadAt         *time.Time             `json:"read_at,omitempty"`
+	FileName       string                 `json:"file_name,omitempty"`
+	FileURL        string                 `json:"file_url,omitempty"`
+	FileType       string                 `json:"file_content_type,omitempty"`
+	Payload        map[string]interface{} `json:"payload,omitempty"`
 }
 
 var upgrader = websocket.Upgrader{
@@ -259,18 +267,48 @@ func (c *Client) handleMessageEvent(event map[string]interface{}) {
 		return
 	}
 
-	content, ok := event["content"].(string)
-	if !ok || content == "" {
-		return
-	}
-
 	clientMsgID, _ := event["client_message_id"].(string)
+	encrypted, _ := event["encrypted"].(bool)
+
+	var (
+		content        string
+		e2eeVersion    int
+		algorithm      string
+		senderDeviceID string
+		keyID          string
+		iv             string
+		ciphertext     string
+		aad            string
+	)
+
+	if encrypted {
+		e2eeVersionRaw, ok := event["e2ee_v"].(float64)
+		if !ok {
+			return
+		}
+		e2eeVersion = int(e2eeVersionRaw)
+		algorithm, _ = event["alg"].(string)
+		senderDeviceID, _ = event["sender_device_id"].(string)
+		keyID, _ = event["key_id"].(string)
+		iv, _ = event["iv"].(string)
+		ciphertext, _ = event["ciphertext"].(string)
+		aad, _ = event["aad"].(string)
+		if e2eeVersion <= 0 || algorithm == "" || senderDeviceID == "" || keyID == "" || iv == "" || ciphertext == "" {
+			return
+		}
+		content = ""
+	} else {
+		content, ok = event["content"].(string)
+		if !ok || content == "" {
+			return
+		}
+	}
 
 	// Save message to database
 	result, err := c.hub.db.Exec(`
-		INSERT INTO messages (sender_id, receiver_id, content, status, created_at)
-		VALUES (?, ?, ?, 'sent', CURRENT_TIMESTAMP)
-	`, c.userID, int(receiverID), content)
+		INSERT INTO messages (sender_id, receiver_id, content, encrypted, e2ee_v, alg, sender_device_id, key_id, iv, ciphertext, aad, status, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sent', CURRENT_TIMESTAMP)
+	`, c.userID, int(receiverID), content, encrypted, e2eeVersion, algorithm, senderDeviceID, keyID, iv, ciphertext, aad)
 
 	if err != nil {
 		log.Printf("Failed to save message: %v", err)
@@ -281,14 +319,22 @@ func (c *Client) handleMessageEvent(event map[string]interface{}) {
 
 	// Broadcast to hub
 	msg := &MessageEvent{
-		Type:        "message",
-		MessageID:   int(msgID),
-		SenderID:    c.userID,
-		ReceiverID:  int(receiverID),
-		ClientMsgID: clientMsgID,
-		Content:     content,
-		Status:      "sent",
-		CreatedAt:   time.Now(),
+		Type:           "message",
+		MessageID:      int(msgID),
+		SenderID:       c.userID,
+		ReceiverID:     int(receiverID),
+		ClientMsgID:    clientMsgID,
+		Content:        content,
+		Encrypted:      encrypted,
+		E2EEVersion:    e2eeVersion,
+		Algorithm:      algorithm,
+		SenderDeviceID: senderDeviceID,
+		KeyID:          keyID,
+		IV:             iv,
+		Ciphertext:     ciphertext,
+		AAD:            aad,
+		Status:         "sent",
+		CreatedAt:      time.Now(),
 	}
 
 	c.hub.broadcast <- msg

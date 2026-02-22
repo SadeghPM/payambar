@@ -83,6 +83,8 @@ const app = createApp({
             authTab: 'login',
             login: { username: '', password: '' },
             register: { username: '', password: '', confirm: '' },
+            authPassword: '',
+            suppressBackupWarningOnce: false,
             authError: '',
             chatListOpen: true,
             loadingMessages: false,
@@ -146,6 +148,19 @@ const app = createApp({
             callTimer: null,
             callStartTime: null,
             audioEnabled: true,
+            e2ee: {
+                enabled: true,
+                ready: false,
+                ownerUserId: null,
+                deviceId: '',
+                keyId: '',
+                privateJwk: null,
+                publicJwk: null,
+                recipientKeys: {},
+                recipientKeyPromises: {},
+                recipientKeyMeta: {}, // { [userId]: { fetchedAt: number } }
+                noKeyWarnedRecipients: {},
+            },
         };
     },
     computed: {
@@ -179,6 +194,7 @@ const app = createApp({
         if (this.isAuthed) {
             this.loadConversations();
             this.loadMyProfile();
+            this.ensureE2EEReady().catch((err) => console.warn('E2EE init skipped:', err));
             this.connectWebSocket();
             this.fetchWebRTCConfig();
         }
@@ -226,6 +242,307 @@ const app = createApp({
                 localStorage.clear();
                 console.log('localStorage cleared - no valid auth data');
             }
+        },
+
+        utf8ToBase64Url(value) {
+            const bytes = new TextEncoder().encode(value);
+            return this.bytesToBase64Url(bytes);
+        },
+        base64UrlToUtf8(value) {
+            const bytes = this.base64UrlToBytes(value);
+            return new TextDecoder().decode(bytes);
+        },
+        bytesToBase64Url(bytes) {
+            let binary = '';
+            bytes.forEach((b) => { binary += String.fromCharCode(b); });
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+        },
+        base64UrlToBytes(value) {
+            const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((value.length + 3) % 4);
+            const binary = atob(base64);
+            const out = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+            return out;
+        },
+        async ensureE2EEReady() {
+            if (!this.e2ee.enabled || !window.crypto?.subtle || !this.token || !this.userId) return false;
+            if (
+                this.e2ee.ready &&
+                this.e2ee.privateJwk &&
+                this.e2ee.publicJwk &&
+                Number(this.e2ee.ownerUserId) === Number(this.userId)
+            ) return true;
+
+            if (Number(this.e2ee.ownerUserId) !== Number(this.userId)) {
+                this.resetE2EEState();
+            }
+
+            const storagePrefix = `payambar:e2ee:${this.userId}`;
+            const storedPrivate = localStorage.getItem(`${storagePrefix}:private_jwk`);
+            const storedPublic = localStorage.getItem(`${storagePrefix}:public_jwk`);
+            const storedDeviceId = localStorage.getItem(`${storagePrefix}:device_id`);
+            const storedKeyId = localStorage.getItem(`${storagePrefix}:key_id`);
+
+            const passwordForBackup = this.authPassword || '';
+
+            if (storedPrivate && storedPublic && storedDeviceId && storedKeyId) {
+                this.e2ee.privateJwk = JSON.parse(storedPrivate);
+                this.e2ee.publicJwk = JSON.parse(storedPublic);
+                this.e2ee.deviceId = storedDeviceId;
+                this.e2ee.keyId = storedKeyId;
+                this.e2ee.ownerUserId = this.userId;
+            } else if (passwordForBackup) {
+                // Try restoring from server backup
+                const myDevices = await this.getMyDeviceKeys();
+                const backupDevice = (myDevices || []).find((d) => d.enc_private_key);
+                if (backupDevice) {
+                    try {
+                        const { privateJwk, publicJwk } = await this.decryptPrivateKeyBackup(backupDevice, passwordForBackup);
+                        this.e2ee.privateJwk = privateJwk;
+                        this.e2ee.publicJwk = publicJwk;
+                        this.e2ee.deviceId = backupDevice.device_id;
+                        this.e2ee.keyId = backupDevice.key_id;
+                        this.e2ee.ownerUserId = this.userId;
+                        localStorage.setItem(`${storagePrefix}:private_jwk`, JSON.stringify(privateJwk));
+                        localStorage.setItem(`${storagePrefix}:public_jwk`, JSON.stringify(publicJwk));
+                        localStorage.setItem(`${storagePrefix}:device_id`, backupDevice.device_id);
+                        localStorage.setItem(`${storagePrefix}:key_id`, backupDevice.key_id);
+                    } catch (err) {
+                        console.warn('Failed to decrypt backed up key', err);
+                        alert('بازیابی کلید امن با رمز عبور فعلی ممکن نیست. پیام‌های قدیمی ممکن است قابل خواندن نباشند.');
+                    }
+                } else {
+                    if (!this.suppressBackupWarningOnce) {
+                        alert('پشتیبان کلید امنی روی سرور پیدا نشد. کلید جدید ساخته می‌شود و پیام‌های رمزنگاری‌شده قبلی در این دستگاه قابل خواندن نیست.');
+                    }
+                }
+            }
+
+            if (!this.e2ee.privateJwk || !this.e2ee.publicJwk) {
+                const keyPair = await window.crypto.subtle.generateKey(
+                    { name: 'ECDH', namedCurve: 'P-256' },
+                    true,
+                    ['deriveBits']
+                );
+                const privateJwk = await window.crypto.subtle.exportKey('jwk', keyPair.privateKey);
+                const publicJwk = await window.crypto.subtle.exportKey('jwk', keyPair.publicKey);
+                const deviceId = (window.crypto.randomUUID ? window.crypto.randomUUID() : `web-${Date.now()}`);
+                const keyId = `k-${Date.now()}`;
+                localStorage.setItem(`${storagePrefix}:private_jwk`, JSON.stringify(privateJwk));
+                localStorage.setItem(`${storagePrefix}:public_jwk`, JSON.stringify(publicJwk));
+                localStorage.setItem(`${storagePrefix}:device_id`, deviceId);
+                localStorage.setItem(`${storagePrefix}:key_id`, keyId);
+                this.e2ee.privateJwk = privateJwk;
+                this.e2ee.publicJwk = publicJwk;
+                this.e2ee.deviceId = deviceId;
+                this.e2ee.keyId = keyId;
+                this.e2ee.ownerUserId = this.userId;
+            }
+
+            // Backup (and publish) device key
+            let backupPayload = {};
+            if (passwordForBackup) {
+                try {
+                    backupPayload = await this.encryptPrivateKeyForBackup(this.e2ee.privateJwk, passwordForBackup);
+                } catch (err) {
+                    console.warn('Encrypt private key for backup failed', err);
+                }
+            }
+
+            const res = await fetch(`${API_URL}/keys/devices`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
+                body: JSON.stringify({
+                    device_id: this.e2ee.deviceId,
+                    algorithm: 'ECDH-P256',
+                    public_key: this.utf8ToBase64Url(JSON.stringify(this.e2ee.publicJwk)),
+                    key_id: this.e2ee.keyId,
+                    ...backupPayload,
+                }),
+            });
+            if (!res.ok) {
+                this.authPassword = '';
+                return false;
+            }
+            this.e2ee.ready = true;
+            this.authPassword = '';
+            this.suppressBackupWarningOnce = false;
+            return true;
+        },
+
+        async getMyDeviceKeys() {
+            const res = await fetch(`${API_URL}/keys/devices/self`, {
+                headers: { Authorization: `Bearer ${this.token}` },
+            });
+            if (!res.ok) return [];
+            const data = await res.json();
+            return data.devices || [];
+        },
+
+        async encryptPrivateKeyForBackup(privateJwk, password) {
+            const saltBytes = window.crypto.getRandomValues(new Uint8Array(16));
+            const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+            const derivedKey = await this.derivePasswordKey(password, saltBytes, 150000);
+            const encoded = new TextEncoder().encode(JSON.stringify(privateJwk));
+            const encrypted = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBytes }, derivedKey, encoded);
+            return {
+                enc_private_key: this.bytesToBase64Url(new Uint8Array(encrypted)),
+                enc_private_key_iv: this.bytesToBase64Url(ivBytes),
+                kdf_salt: this.bytesToBase64Url(saltBytes),
+                kdf_iterations: 150000,
+                kdf_alg: 'PBKDF2-SHA256',
+                key_wrap_version: 1,
+            };
+        },
+
+        async decryptPrivateKeyBackup(device, password) {
+            if (!device?.enc_private_key || !device?.enc_private_key_iv || !device?.kdf_salt || !device?.kdf_iterations) {
+                throw new Error('missing backup fields');
+            }
+            const saltBytes = this.base64UrlToBytes(device.kdf_salt);
+            const ivBytes = this.base64UrlToBytes(device.enc_private_key_iv);
+            const derivedKey = await this.derivePasswordKey(password, saltBytes, device.kdf_iterations);
+            const decrypted = await window.crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: ivBytes },
+                derivedKey,
+                this.base64UrlToBytes(device.enc_private_key)
+            );
+            const privateJwk = JSON.parse(new TextDecoder().decode(decrypted));
+            return {
+                privateJwk,
+                publicJwk: JSON.parse(this.base64UrlToUtf8(device.public_key)),
+            };
+        },
+
+        async derivePasswordKey(password, saltBytes, iterations) {
+            const enc = new TextEncoder().encode(password);
+            const baseKey = await window.crypto.subtle.importKey('raw', enc, 'PBKDF2', false, ['deriveKey']);
+            return window.crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: saltBytes,
+                    iterations,
+                    hash: 'SHA-256',
+                },
+                baseKey,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        },
+        async getUserDeviceKeys(userId) {
+            const TTL_POPULATED_MS = 30000;
+            const TTL_EMPTY_MS = 3000;
+            const meta = this.e2ee.recipientKeyMeta[userId];
+            if (this.e2ee.recipientKeys[userId] && meta && Date.now() - meta.fetchedAt < meta.ttl) {
+                return this.e2ee.recipientKeys[userId];
+            }
+            if (this.e2ee.recipientKeyPromises[userId]) return this.e2ee.recipientKeyPromises[userId];
+
+            const fetchPromise = (async () => {
+                const res = await fetch(`${API_URL}/keys/users/${userId}/devices`, {
+                    headers: { Authorization: `Bearer ${this.token}` },
+                });
+                if (!res.ok) throw new Error('failed to fetch device keys');
+                const data = await res.json();
+                const devices = (data.devices || []).filter((d) =>
+                    (d.algorithm || '').toUpperCase() === 'ECDH-P256' && !!d.public_key
+                );
+                this.e2ee.recipientKeys[userId] = devices;
+                this.e2ee.recipientKeyMeta[userId] = {
+                    fetchedAt: Date.now(),
+                    ttl: devices.length ? TTL_POPULATED_MS : TTL_EMPTY_MS,
+                };
+                return devices;
+            })();
+
+            this.e2ee.recipientKeyPromises[userId] = fetchPromise.finally(() => {
+                delete this.e2ee.recipientKeyPromises[userId];
+            });
+
+            return fetchPromise;
+        },
+        async getRecipientDeviceKey(userId, { keyId = null, deviceId = null } = {}) {
+            const devices = await this.getUserDeviceKeys(userId);
+            if (!devices.length) return null;
+
+            if (keyId || deviceId) {
+                const matched = devices.find((d) =>
+                    (!keyId || d.key_id === keyId) && (!deviceId || d.device_id === deviceId)
+                );
+                if (matched) return matched;
+            }
+
+            return devices[0] || null;
+        },
+        async deriveAesKeyFromDevice(device) {
+            const privateKey = await window.crypto.subtle.importKey(
+                'jwk',
+                this.e2ee.privateJwk,
+                { name: 'ECDH', namedCurve: 'P-256' },
+                false,
+                ['deriveBits']
+            );
+            const publicJwk = JSON.parse(this.base64UrlToUtf8(device.public_key));
+            const recipientPublicKey = await window.crypto.subtle.importKey(
+                'jwk',
+                publicJwk,
+                { name: 'ECDH', namedCurve: 'P-256' },
+                false,
+                []
+            );
+            const bits = await window.crypto.subtle.deriveBits(
+                { name: 'ECDH', public: recipientPublicKey },
+                privateKey,
+                256
+            );
+            return window.crypto.subtle.importKey('raw', bits, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+        },
+        async encryptTextMessage(receiverId, plainText) {
+            const ready = await this.ensureE2EEReady();
+            if (!ready) return null;
+            const device = await this.getRecipientDeviceKey(receiverId);
+            if (!device) return null;
+            const aesKey = await this.deriveAesKeyFromDevice(device);
+            const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+            const encoded = new TextEncoder().encode(plainText);
+            const encryptedBuffer = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBytes }, aesKey, encoded);
+            return {
+                encrypted: true,
+                e2ee_v: 1,
+                alg: 'AES-256-GCM',
+                sender_device_id: this.e2ee.deviceId,
+                key_id: this.e2ee.keyId,
+                iv: this.bytesToBase64Url(ivBytes),
+                ciphertext: this.bytesToBase64Url(new Uint8Array(encryptedBuffer)),
+            };
+        },
+        async maybeDecryptMessage(msg) {
+            if (!msg?.encrypted || !msg?.ciphertext || !msg?.iv) return msg;
+            try {
+                const isOutgoing = Number(msg.sender_id) === Number(this.userId);
+                const peerId = isOutgoing ? Number(msg.receiver_id) : Number(msg.sender_id);
+                const device = await this.getRecipientDeviceKey(
+                    peerId,
+                    isOutgoing ? {} : { keyId: msg.key_id, deviceId: msg.sender_device_id }
+                );
+                if (!device) return { ...msg, content: '🔒 پیام رمزنگاری شده' };
+                const aesKey = await this.deriveAesKeyFromDevice(device);
+                const plaintextBuffer = await window.crypto.subtle.decrypt(
+                    { name: 'AES-GCM', iv: this.base64UrlToBytes(msg.iv) },
+                    aesKey,
+                    this.base64UrlToBytes(msg.ciphertext)
+                );
+                const content = new TextDecoder().decode(plaintextBuffer);
+                return { ...msg, content };
+            } catch (err) {
+                console.warn('Decrypt failed', err);
+                return { ...msg, content: '🔒 پیام رمزنگاری شده (قابل خواندن نیست)' };
+            }
+        },
+        async decryptMessageList(messages) {
+            if (!Array.isArray(messages) || messages.length === 0) return [];
+            return Promise.all(messages.map((m) => this.maybeDecryptMessage(m)));
         },
         formatDate(value) {
             if (!value) return '';
@@ -428,6 +745,8 @@ const app = createApp({
                 });
                 if (!res.ok) throw new Error((await res.json()).error || 'Login failed');
                 const data = await res.json();
+                this.authPassword = this.login.password;
+                this.suppressBackupWarningOnce = false;
                 this.setAuth(data);
             } catch (err) {
                 this.authError = err.message;
@@ -447,6 +766,8 @@ const app = createApp({
                 });
                 if (!res.ok) throw new Error((await res.json()).error || 'Registration failed');
                 const data = await res.json();
+                this.authPassword = this.register.password;
+                this.suppressBackupWarningOnce = true; // first device has no backup; avoid warning
                 this.setAuth(data);
             } catch (err) {
                 this.authError = err.message;
@@ -454,6 +775,9 @@ const app = createApp({
         },
         setAuth(data) {
             this.closeWebSocket(true);
+            if (Number(this.userId) !== Number(data.user_id)) {
+                this.resetE2EEState();
+            }
             this.token = data.token;
             this.userId = data.user_id;
             this.username = data.username;
@@ -462,12 +786,28 @@ const app = createApp({
             localStorage.setItem('username', this.username);
             this.loadConversations();
             this.loadMyProfile();
+            // Ensure device key is registered as soon as the user is authenticated
+            this.ensureE2EEReady().catch((err) => console.warn('E2EE init after auth failed', err));
             this.connectWebSocket();
         },
+        resetE2EEState() {
+            this.e2ee.ready = false;
+            this.e2ee.ownerUserId = null;
+            this.e2ee.deviceId = '';
+            this.e2ee.keyId = '';
+            this.e2ee.privateJwk = null;
+            this.e2ee.publicJwk = null;
+            this.e2ee.recipientKeys = {};
+            this.e2ee.recipientKeyPromises = {};
+            this.e2ee.recipientKeyMeta = {};
+            this.e2ee.noKeyWarnedRecipients = {};
+        },
         clearAuth() {
+            this.resetE2EEState();
             this.token = null;
             this.userId = null;
             this.username = null;
+            this.authPassword = '';
             this.conversations = [];
             this.messages = {};
             this.currentConversationId = null;
@@ -670,7 +1010,7 @@ const app = createApp({
                     throw new Error('Failed to load messages');
                 }
                 const data = await res.json();
-                this.messages[conv.user_id] = data.messages || [];
+                this.messages[conv.user_id] = await this.decryptMessageList(data.messages || []);
                 // If we got 50 messages, there might be more
                 this.hasMoreMessages[conv.user_id] = (data.messages || []).length >= 50;
 
@@ -722,12 +1062,21 @@ const app = createApp({
             this.messageText = '';
             this.chatListOpen = false;
 
-            this.ws.send(JSON.stringify({
+            const encryptedPayload = await this.encryptTextMessage(this.currentConversationId, content);
+            if (this.e2ee.enabled && !encryptedPayload && !this.e2ee.noKeyWarnedRecipients[this.currentConversationId]) {
+                alert('ارسال امن ممکن نیست؛ کلید مخاطب در دسترس نیست. پیام به صورت غیر رمزنگاری‌شده ارسال می‌شود.');
+                this.e2ee.noKeyWarnedRecipients[this.currentConversationId] = true;
+            }
+
+            const payload = {
                 type: 'message',
                 receiver_id: this.currentConversationId,
-                content,
+                content: encryptedPayload ? '' : content,
                 client_message_id: clientMessageId,
-            }));
+            };
+            if (encryptedPayload) Object.assign(payload, encryptedPayload);
+
+            this.ws.send(JSON.stringify(payload));
             this.$nextTick(() => this.scrollToBottom());
         },
         async sendFileMessage(file) {
@@ -921,7 +1270,7 @@ const app = createApp({
                 }
 
                 const data = await res.json();
-                const olderMessages = data.messages || [];
+                const olderMessages = await this.decryptMessageList(data.messages || []);
 
                 if (olderMessages.length > 0) {
                     // Prepend older messages to existing ones
@@ -1005,7 +1354,7 @@ const app = createApp({
                 }
 
                 const data = await res.json();
-                this.messages[this.currentConversationId] = data.messages || [];
+                this.messages[this.currentConversationId] = await this.decryptMessageList(data.messages || []);
                 this.hasMoreMessages[this.currentConversationId] = (data.messages || []).length >= 50;
 
                 const latestMessage = this.messages[this.currentConversationId].length
@@ -1111,7 +1460,7 @@ const app = createApp({
                 }
             };
         },
-        handleWebSocketMessage(data) {
+        async handleWebSocketMessage(data) {
             if (data.type === 'call_offer') {
                 if (this.activeCall || this.incomingCall || this.outgoingCall) {
                     this.ws.send(JSON.stringify({ type: 'call_reject', receiver_id: data.sender_id, payload: { reason: 'busy' } }));
@@ -1148,6 +1497,8 @@ const app = createApp({
                     this.endCall(false);
                 }
             } else if (data.type === 'message') {
+                const normalizedMessage = await this.maybeDecryptMessage(data);
+                const incomingContent = normalizedMessage.content;
                 const convUser = data.sender_id === this.userId ? data.receiver_id : data.sender_id;
                 if (!this.messages[convUser]) this.messages[convUser] = [];
                 const incomingID = Number(data.message_id);
@@ -1178,13 +1529,21 @@ const app = createApp({
                             id: data.message_id,
                             sender_id: data.sender_id,
                             receiver_id: data.receiver_id,
-                            content: data.content,
+                            content: incomingContent,
                             status: data.status,
                             created_at: data.created_at,
                             client_message_id: data.client_message_id,
                             file_name: data.file_name,
                             file_url: data.file_url,
                             file_content_type: data.file_content_type,
+                            encrypted: !!data.encrypted,
+                            e2ee_v: data.e2ee_v,
+                            alg: data.alg,
+                            sender_device_id: data.sender_device_id,
+                            key_id: data.key_id,
+                            iv: data.iv,
+                            ciphertext: data.ciphertext,
+                            aad: data.aad,
                         });
                     }
                 } else {
@@ -1201,12 +1560,20 @@ const app = createApp({
                             id: data.message_id,
                             sender_id: data.sender_id,
                             receiver_id: data.receiver_id,
-                            content: data.content,
+                            content: incomingContent,
                             status: data.status,
                             created_at: data.created_at,
                             file_name: data.file_name,
                             file_url: data.file_url,
                             file_content_type: data.file_content_type,
+                            encrypted: !!data.encrypted,
+                            e2ee_v: data.e2ee_v,
+                            alg: data.alg,
+                            sender_device_id: data.sender_device_id,
+                            key_id: data.key_id,
+                            iv: data.iv,
+                            ciphertext: data.ciphertext,
+                            aad: data.aad,
                         });
                     }
                 }

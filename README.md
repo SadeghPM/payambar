@@ -123,6 +123,26 @@ sudo journalctl -u payambar -f
 - Tests: `make test`
 - Format: `make fmt`
 
+## Text E2EE (current status)
+Payambar supports **text-message E2EE v1** (files/calls are not part of E2EE).
+
+### How it works (v1)
+- Per-device ECDH P-256 keypair generated in browser.
+- Private key is *optionally* backed up to server encrypted with AES-GCM using a PBKDF2-SHA256 key derived from the login password (150k iterations). Password/derived key are never stored.
+- Public key is published via `POST /api/keys/devices`; the owner can restore via `GET /api/keys/devices/self`.
+- Send flow: if recipient key exists → encrypt; if missing → warn once and send plaintext so messages stay readable (backward compatible).
+
+### Quick test
+1) `make dev`  
+2) Register/login two users in separate browsers.  
+3) Send messages; confirm encrypted rows in DB:
+```bash
+sqlite3 ./data/payambar.db "select id,encrypted,e2ee_v,alg,length(ciphertext),length(content) from messages order by id desc limit 5;"
+```
+`encrypted=1`, `e2ee_v=1`, `alg= AES-256-GCM`, `content` empty when encrypted.
+
+If you log in on a new device with the same password, the private key is restored and old encrypted messages decrypt without manual export/import.
+
 ## Troubleshooting
 - **Service not up:** `sudo journalctl -u payambar -n 50`
 - **DB locked:** SQLite allows one writer; retry or migrate to Postgres for scale.
@@ -131,3 +151,6 @@ sudo journalctl -u payambar -f
 ---
 
 MIT License
+
+## E2EE planning
+- See `docs/e2ee-text-v1.md` for the proposed text-only E2EE v1 protocol and rollout plan.

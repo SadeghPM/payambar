@@ -103,6 +103,32 @@ func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir string
 }
 
 // ConversationPreview represents a conversation in the list view
+
+type DeviceKeyPayload struct {
+	DeviceID        string  `json:"device_id"`
+	Algorithm       string  `json:"algorithm"`
+	PublicKey       string  `json:"public_key"`
+	KeyID           string  `json:"key_id"`
+	EncPrivateKey   *string `json:"enc_private_key,omitempty"`
+	EncPrivateKeyIV *string `json:"enc_private_key_iv,omitempty"`
+	KDFSalt         *string `json:"kdf_salt,omitempty"`
+	KDFIterations   *int    `json:"kdf_iterations,omitempty"`
+	KDFAlg          *string `json:"kdf_alg,omitempty"`
+	KeyWrapVersion  *int    `json:"key_wrap_version,omitempty"`
+}
+
+type DeviceKeyResponse struct {
+	DeviceID        string  `json:"device_id"`
+	Algorithm       string  `json:"algorithm"`
+	PublicKey       string  `json:"public_key"`
+	KeyID           string  `json:"key_id"`
+	EncPrivateKey   *string `json:"enc_private_key,omitempty"`
+	EncPrivateKeyIV *string `json:"enc_private_key_iv,omitempty"`
+	KDFSalt         *string `json:"kdf_salt,omitempty"`
+	KDFIterations   *int    `json:"kdf_iterations,omitempty"`
+	KDFAlg          *string `json:"kdf_alg,omitempty"`
+	KeyWrapVersion  *int    `json:"key_wrap_version,omitempty"`
+}
 type ConversationPreview struct {
 	ID            int       `json:"id"`
 	UserID        int       `json:"user_id"`
@@ -177,8 +203,8 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 
 	// Get messages between the two users with file attachments in single query (fixes N+1)
 	rows, err := h.db.Query(`
-		SELECT m.id, m.sender_id, m.receiver_id, m.content, m.status, m.created_at, m.delivered_at, m.read_at,
-		       f.file_name, f.file_path, f.content_type
+		SELECT m.id, m.sender_id, m.receiver_id, m.content, m.encrypted, m.e2ee_v, m.alg, m.sender_device_id, m.key_id, m.iv, m.ciphertext, m.aad,
+		       m.status, m.created_at, m.delivered_at, m.read_at, f.file_name, f.file_path, f.content_type
 		FROM messages m
 		LEFT JOIN files f ON f.message_id = m.id
 		WHERE (m.sender_id = ? AND m.receiver_id = ?) OR (m.sender_id = ? AND m.receiver_id = ?)
@@ -195,10 +221,38 @@ func (h *MessageHandler) GetConversation(c *gin.Context) {
 	var messages []*models.Message
 	for rows.Next() {
 		msg := &models.Message{}
-		var fileName, filePath, fileType sql.NullString
-		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Content, &msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.ReadAt, &fileName, &filePath, &fileType); err != nil {
+		var (
+			fileName, filePath, fileType                          sql.NullString
+			e2eeVersion                                           sql.NullInt64
+			encrypted                                             sql.NullInt64
+			algorithm, senderDeviceID, keyID, iv, ciphertext, aad sql.NullString
+		)
+		if err := rows.Scan(&msg.ID, &msg.SenderID, &msg.ReceiverID, &msg.Content, &encrypted, &e2eeVersion, &algorithm, &senderDeviceID, &keyID, &iv, &ciphertext, &aad, &msg.Status, &msg.CreatedAt, &msg.DeliveredAt, &msg.ReadAt, &fileName, &filePath, &fileType); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to scan message")})
 			return
+		}
+		msg.Encrypted = encrypted.Valid && encrypted.Int64 != 0
+		if e2eeVersion.Valid {
+			v := int(e2eeVersion.Int64)
+			msg.E2EEVersion = &v
+		}
+		if algorithm.Valid {
+			msg.Algorithm = &algorithm.String
+		}
+		if senderDeviceID.Valid {
+			msg.SenderDeviceID = &senderDeviceID.String
+		}
+		if keyID.Valid {
+			msg.KeyID = &keyID.String
+		}
+		if iv.Valid {
+			msg.IV = &iv.String
+		}
+		if ciphertext.Valid {
+			msg.Ciphertext = &ciphertext.String
+		}
+		if aad.Valid {
+			msg.AAD = &aad.String
 		}
 		// Set file attachment if present
 		if fileName.Valid {
@@ -1173,6 +1227,160 @@ func (h *MessageHandler) DeleteAccount(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "deleted"})
+}
+
+// UpsertDeviceKey stores or rotates the current user's device public key.
+func (h *MessageHandler) UpsertDeviceKey(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
+		return
+	}
+
+	var payload DeviceKeyPayload
+	if err := c.ShouldBindJSON(&payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid request")})
+		return
+	}
+
+	payload.DeviceID = strings.TrimSpace(payload.DeviceID)
+	payload.Algorithm = strings.TrimSpace(payload.Algorithm)
+	payload.PublicKey = strings.TrimSpace(payload.PublicKey)
+	payload.KeyID = strings.TrimSpace(payload.KeyID)
+	if payload.DeviceID == "" || payload.Algorithm == "" || payload.PublicKey == "" || payload.KeyID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("device_id, algorithm, public_key and key_id are required")})
+		return
+	}
+
+	valOrNil := func(ptr *string) interface{} {
+		if ptr == nil {
+			return nil
+		}
+		return *ptr
+	}
+	intOrNil := func(ptr *int) interface{} {
+		if ptr == nil {
+			return nil
+		}
+		return *ptr
+	}
+
+	_, err := h.db.Exec(`
+		INSERT INTO user_device_keys (
+			user_id, device_id, algorithm, public_key, key_id,
+			enc_private_key, enc_private_key_iv, kdf_salt, kdf_iterations, kdf_alg, key_wrap_version, updated_at
+		)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+		ON CONFLICT(user_id, device_id, key_id)
+		DO UPDATE SET
+			algorithm = excluded.algorithm,
+			public_key = excluded.public_key,
+			enc_private_key = excluded.enc_private_key,
+			enc_private_key_iv = excluded.enc_private_key_iv,
+			kdf_salt = excluded.kdf_salt,
+			kdf_iterations = excluded.kdf_iterations,
+			kdf_alg = excluded.kdf_alg,
+			key_wrap_version = excluded.key_wrap_version,
+			updated_at = CURRENT_TIMESTAMP,
+			revoked_at = NULL
+	`, userID.(int), payload.DeviceID, payload.Algorithm, payload.PublicKey, payload.KeyID,
+		valOrNil(payload.EncPrivateKey), valOrNil(payload.EncPrivateKeyIV), valOrNil(payload.KDFSalt), intOrNil(payload.KDFIterations), valOrNil(payload.KDFAlg), intOrNil(payload.KeyWrapVersion))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to store device key")})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"ok": true, "device_id": payload.DeviceID, "key_id": payload.KeyID})
+}
+
+// GetUserDeviceKeys returns active device public keys for a target user.
+func (h *MessageHandler) GetUserDeviceKeys(c *gin.Context) {
+	userIDStr := c.Param("id")
+	userID, err := strconv.Atoi(userIDStr)
+	if err != nil || userID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid user id")})
+		return
+	}
+
+	rows, err := h.db.Query(`
+		SELECT device_id, algorithm, public_key, key_id
+		FROM user_device_keys
+		WHERE user_id = ? AND revoked_at IS NULL
+		ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch device keys")})
+		return
+	}
+	defer rows.Close()
+
+	devices := make([]DeviceKeyResponse, 0)
+	for rows.Next() {
+		var device DeviceKeyResponse
+		if err := rows.Scan(&device.DeviceID, &device.Algorithm, &device.PublicKey, &device.KeyID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to scan device key")})
+			return
+		}
+		devices = append(devices, device)
+	}
+
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to read device keys")})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"devices": devices})
+}
+
+// GetMyDeviceKeys returns the caller's device keys including encrypted private key metadata.
+func (h *MessageHandler) GetMyDeviceKeys(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
+		return
+	}
+
+	rows, err := h.db.Query(`
+		SELECT device_id, algorithm, public_key, key_id,
+		       enc_private_key, enc_private_key_iv, kdf_salt, kdf_iterations, kdf_alg, key_wrap_version, updated_at
+		FROM user_device_keys
+		WHERE user_id = ? AND revoked_at IS NULL
+		ORDER BY COALESCE(updated_at, created_at) DESC
+	`, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to fetch device keys")})
+		return
+	}
+	defer rows.Close()
+
+	devices := make([]DeviceKeyResponse, 0)
+	for rows.Next() {
+		var device DeviceKeyResponse
+		if err := rows.Scan(
+			&device.DeviceID,
+			&device.Algorithm,
+			&device.PublicKey,
+			&device.KeyID,
+			&device.EncPrivateKey,
+			&device.EncPrivateKeyIV,
+			&device.KDFSalt,
+			&device.KDFIterations,
+			&device.KDFAlg,
+			&device.KeyWrapVersion,
+			new(interface{}), // updated_at ignored in response
+		); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to scan device key")})
+			return
+		}
+		devices = append(devices, device)
+	}
+
+	if err := rows.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to read device keys")})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"devices": devices})
 }
 
 // GetMyProfile returns the current user's profile

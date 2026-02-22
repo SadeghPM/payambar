@@ -64,6 +64,14 @@ func TestMain(m *testing.M) {
 			sender_id INTEGER NOT NULL,
 			receiver_id INTEGER NOT NULL,
 			content TEXT NOT NULL,
+			encrypted INTEGER NOT NULL DEFAULT 0,
+			e2ee_v INTEGER,
+			alg TEXT,
+			sender_device_id TEXT,
+			key_id TEXT,
+			iv TEXT,
+			ciphertext TEXT,
+			aad TEXT,
 			status TEXT DEFAULT 'sent',
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			delivered_at TIMESTAMP,
@@ -81,6 +89,25 @@ func TestMain(m *testing.M) {
 			content_type TEXT,
 			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (message_id) REFERENCES messages(id)
+		);
+
+		CREATE TABLE IF NOT EXISTS user_device_keys (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			device_id TEXT NOT NULL,
+			algorithm TEXT NOT NULL,
+			public_key TEXT NOT NULL,
+			key_id TEXT NOT NULL,
+			enc_private_key TEXT,
+			enc_private_key_iv TEXT,
+			kdf_salt TEXT,
+			kdf_iterations INTEGER,
+			kdf_alg TEXT,
+			key_wrap_version INTEGER,
+			updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			revoked_at TIMESTAMP,
+			UNIQUE (user_id, device_id, key_id)
 		);
 	`)
 	if err != nil {
@@ -119,6 +146,9 @@ func setupTestRouter() *gin.Engine {
 	{
 		protected.GET("/messages", msgHandler.GetConversation)
 		protected.GET("/conversations", msgHandler.GetConversations)
+		protected.POST("/keys/devices", msgHandler.UpsertDeviceKey)
+		protected.GET("/keys/devices/self", msgHandler.GetMyDeviceKeys)
+		protected.GET("/keys/users/:id/devices", msgHandler.GetUserDeviceKeys)
 		protected.GET("/users", msgHandler.GetUsers)
 		protected.POST("/conversations", msgHandler.CreateConversation)
 		protected.DELETE("/conversations/:id", msgHandler.DeleteConversation)
@@ -781,5 +811,100 @@ func TestDeleteAccountConversationMembershipCleanup(t *testing.T) {
 	}
 	if _, err := os.Stat(avatarFile); !os.IsNotExist(err) {
 		t.Fatalf("Expected avatar file to be removed, err=%v", err)
+	}
+}
+
+func TestDeviceKeysAPI(t *testing.T) {
+	clearTestData()
+
+	result, err := testDB.Exec(`INSERT INTO users (username, password_hash) VALUES (?, ?), (?, ?)`, "keysuser1", "hash", "keysuser2", "hash")
+	if err != nil {
+		t.Fatalf("failed to insert users: %v", err)
+	}
+	lastID, _ := result.LastInsertId()
+	user2ID := int(lastID)
+	user1ID := user2ID - 1
+	token1, _ := testAuthSvc.GenerateToken(user1ID, "keysuser1")
+
+	body := map[string]interface{}{
+		"device_id":          "web-device-1",
+		"algorithm":          "X25519",
+		"public_key":         "base64pubkey",
+		"key_id":             "k-2026-01",
+		"enc_private_key":    "encpk",
+		"enc_private_key_iv": "iv",
+		"kdf_salt":           "salt",
+		"kdf_iterations":     150000,
+		"kdf_alg":            "PBKDF2-SHA256",
+		"key_wrap_version":   1,
+	}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/api/keys/devices", bytes.NewBuffer(jsonBody))
+	req.Header.Set("Authorization", "Bearer "+token1)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	testRouter.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("upsert device key status = %d, want 200", w.Code)
+	}
+
+	var count int
+	if err := testDB.QueryRow("SELECT COUNT(*) FROM user_device_keys WHERE user_id = ?", user1ID).Scan(&count); err != nil {
+		t.Fatalf("query device key count failed: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 device key row, got %d", count)
+	}
+
+	req = httptest.NewRequest("GET", "/api/keys/users/"+strconv.Itoa(user1ID)+"/devices", nil)
+	req.Header.Set("Authorization", "Bearer "+token1)
+	w = httptest.NewRecorder()
+	testRouter.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get user device keys status = %d, want 200", w.Code)
+	}
+
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	devices, ok := resp["devices"].([]interface{})
+	if !ok {
+		t.Fatalf("expected devices array in response")
+	}
+	if len(devices) != 1 {
+		t.Fatalf("expected 1 device key returned, got %d", len(devices))
+	}
+	deviceMap, _ := devices[0].(map[string]interface{})
+	if _, exists := deviceMap["enc_private_key"]; exists {
+		t.Fatalf("public device listing should not include enc_private_key")
+	}
+
+	req = httptest.NewRequest("GET", "/api/keys/users/"+strconv.Itoa(user2ID)+"/devices", nil)
+	req.Header.Set("Authorization", "Bearer "+token1)
+	w = httptest.NewRecorder()
+	testRouter.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get empty user keys status = %d, want 200", w.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/api/keys/devices/self", nil)
+	req.Header.Set("Authorization", "Bearer "+token1)
+	w = httptest.NewRecorder()
+	testRouter.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get my device keys status = %d, want 200", w.Code)
+	}
+	var selfResp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &selfResp); err != nil {
+		t.Fatalf("failed to parse self response: %v", err)
+	}
+	selfDevices, ok := selfResp["devices"].([]interface{})
+	if !ok || len(selfDevices) != 1 {
+		t.Fatalf("expected 1 device key in self response")
+	}
+	selfDevice, _ := selfDevices[0].(map[string]interface{})
+	if selfDevice["enc_private_key"] != "encpk" || selfDevice["kdf_alg"] != "PBKDF2-SHA256" {
+		t.Fatalf("expected encrypted fields in self response")
 	}
 }

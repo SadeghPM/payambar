@@ -11,17 +11,25 @@ type User struct {
 }
 
 type Message struct {
-	ID          int        `json:"id"`
-	SenderID    int        `json:"sender_id"`
-	ReceiverID  int        `json:"receiver_id"`
-	Content     string     `json:"content"`
-	Status      string     `json:"status"` // sent, delivered, read
-	CreatedAt   time.Time  `json:"created_at"`
-	DeliveredAt *time.Time `json:"delivered_at,omitempty"`
-	ReadAt      *time.Time `json:"read_at,omitempty"`
-	FileName    *string    `json:"file_name,omitempty"`
-	FileURL     *string    `json:"file_url,omitempty"`
-	FileType    *string    `json:"file_content_type,omitempty"`
+	ID             int        `json:"id"`
+	SenderID       int        `json:"sender_id"`
+	ReceiverID     int        `json:"receiver_id"`
+	Content        string     `json:"content"`
+	Encrypted      bool       `json:"encrypted,omitempty"`
+	E2EEVersion    *int       `json:"e2ee_v,omitempty"`
+	Algorithm      *string    `json:"alg,omitempty"`
+	SenderDeviceID *string    `json:"sender_device_id,omitempty"`
+	KeyID          *string    `json:"key_id,omitempty"`
+	IV             *string    `json:"iv,omitempty"`
+	Ciphertext     *string    `json:"ciphertext,omitempty"`
+	AAD            *string    `json:"aad,omitempty"`
+	Status         string     `json:"status"` // sent, delivered, read
+	CreatedAt      time.Time  `json:"created_at"`
+	DeliveredAt    *time.Time `json:"delivered_at,omitempty"`
+	ReadAt         *time.Time `json:"read_at,omitempty"`
+	FileName       *string    `json:"file_name,omitempty"`
+	FileURL        *string    `json:"file_url,omitempty"`
+	FileType       *string    `json:"file_content_type,omitempty"`
 }
 
 type File struct {
