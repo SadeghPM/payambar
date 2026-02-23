@@ -27,11 +27,15 @@ Upgrade to the latest release:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/4xmen/payambar/main/install.sh | sudo bash -s -- --update
 ```
-What it does:
+
+**`--install`** creates everything from scratch:
 - Fetches the latest release asset from GitHub and installs the `payambar` binary to `/opt/payambar`.
 - Creates system user `payambar`, data dir `/var/lib/payambar` (uploads at `/var/lib/payambar/uploads`), env file `/etc/payambar/payambar.env`.
 - Seeds an empty SQLite DB file, installs a systemd unit, enables the service, and starts/restarts it.
 - Default port: `8080`. Change `PORT` or `JWT_SECRET` in `/etc/payambar/payambar.env` then `sudo systemctl restart payambar`.
+
+**`--update`** only replaces the binary and restarts the service:
+- Your `.env` config (`/etc/payambar/payambar.env`) and systemd unit are **preserved** — custom ports, secrets, and service settings are not overwritten.
 
 Common commands:
 ```bash

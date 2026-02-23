@@ -246,6 +246,10 @@ EOF
 }
 
 write_systemd_unit() {
+  if [ -f "${SYSTEMD_UNIT}" ]; then
+    echo "[info] Systemd unit ${SYSTEMD_UNIT} already exists, keeping existing configuration."
+    return
+  fi
   cat >"${SYSTEMD_UNIT}" <<EOF
 [Unit]
 Description=Payambar messenger server
@@ -305,12 +309,20 @@ main() {
   local bin_path
   bin_path=$(download_and_extract "${asset_url}")
 
-  setup_user_and_dirs
-  install_binary "${bin_path}"
-  write_env_file
-  write_systemd_unit
-  start_service
-  print_port_hint
+  if [ "${ACTION}" = "update" ]; then
+    echo "[info] Updating binary only — preserving existing config and service."
+    install_binary "${bin_path}"
+    systemctl daemon-reload
+    start_service
+    print_port_hint
+  else
+    setup_user_and_dirs
+    install_binary "${bin_path}"
+    write_env_file
+    write_systemd_unit
+    start_service
+    print_port_hint
+  fi
 }
 
 main "$@"

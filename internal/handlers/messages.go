@@ -1275,12 +1275,12 @@ func (h *MessageHandler) UpsertDeviceKey(c *gin.Context) {
 		DO UPDATE SET
 			algorithm = excluded.algorithm,
 			public_key = excluded.public_key,
-			enc_private_key = excluded.enc_private_key,
-			enc_private_key_iv = excluded.enc_private_key_iv,
-			kdf_salt = excluded.kdf_salt,
-			kdf_iterations = excluded.kdf_iterations,
-			kdf_alg = excluded.kdf_alg,
-			key_wrap_version = excluded.key_wrap_version,
+			enc_private_key = COALESCE(excluded.enc_private_key, user_device_keys.enc_private_key),
+			enc_private_key_iv = COALESCE(excluded.enc_private_key_iv, user_device_keys.enc_private_key_iv),
+			kdf_salt = COALESCE(excluded.kdf_salt, user_device_keys.kdf_salt),
+			kdf_iterations = COALESCE(excluded.kdf_iterations, user_device_keys.kdf_iterations),
+			kdf_alg = COALESCE(excluded.kdf_alg, user_device_keys.kdf_alg),
+			key_wrap_version = COALESCE(excluded.key_wrap_version, user_device_keys.key_wrap_version),
 			updated_at = CURRENT_TIMESTAMP,
 			revoked_at = NULL
 	`, userID.(int), payload.DeviceID, payload.Algorithm, payload.PublicKey, payload.KeyID,

@@ -286,6 +286,7 @@ const app = createApp({
             const storedKeyId = localStorage.getItem(`${storagePrefix}:key_id`);
 
             const passwordForBackup = this.authPassword || '';
+            let keysFromExistingSource = false;
 
             if (storedPrivate && storedPublic && storedDeviceId && storedKeyId) {
                 this.e2ee.privateJwk = JSON.parse(storedPrivate);
@@ -293,6 +294,7 @@ const app = createApp({
                 this.e2ee.deviceId = storedDeviceId;
                 this.e2ee.keyId = storedKeyId;
                 this.e2ee.ownerUserId = this.userId;
+                keysFromExistingSource = true;
             } else if (passwordForBackup) {
                 // Try restoring from server backup
                 const myDevices = await this.getMyDeviceKeys();
@@ -305,6 +307,7 @@ const app = createApp({
                         this.e2ee.deviceId = backupDevice.device_id;
                         this.e2ee.keyId = backupDevice.key_id;
                         this.e2ee.ownerUserId = this.userId;
+                        keysFromExistingSource = true;
                         localStorage.setItem(`${storagePrefix}:private_jwk`, JSON.stringify(privateJwk));
                         localStorage.setItem(`${storagePrefix}:public_jwk`, JSON.stringify(publicJwk));
                         localStorage.setItem(`${storagePrefix}:device_id`, backupDevice.device_id);
@@ -351,20 +354,27 @@ const app = createApp({
                 }
             }
 
-            const res = await fetch(`${API_URL}/keys/devices`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
-                body: JSON.stringify({
-                    device_id: this.e2ee.deviceId,
-                    algorithm: 'ECDH-P256',
-                    public_key: this.utf8ToBase64Url(JSON.stringify(this.e2ee.publicJwk)),
-                    key_id: this.e2ee.keyId,
-                    ...backupPayload,
-                }),
-            });
-            if (!res.ok) {
-                this.authPassword = '';
-                return false;
+            try {
+                const res = await fetch(`${API_URL}/keys/devices`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.token}` },
+                    body: JSON.stringify({
+                        device_id: this.e2ee.deviceId,
+                        algorithm: 'ECDH-P256',
+                        public_key: this.utf8ToBase64Url(JSON.stringify(this.e2ee.publicJwk)),
+                        key_id: this.e2ee.keyId,
+                        ...backupPayload,
+                    }),
+                });
+                if (!res.ok) throw new Error('Device key publish failed');
+            } catch (err) {
+                console.warn('Failed to publish device key:', err);
+                if (!keysFromExistingSource) {
+                    // New keys that were never published — recipient can't decrypt
+                    this.authPassword = '';
+                    return false;
+                }
+                // Keys were previously published, local encryption still works
             }
             this.e2ee.ready = true;
             this.authPassword = '';
@@ -501,23 +511,28 @@ const app = createApp({
             return window.crypto.subtle.importKey('raw', bits, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
         },
         async encryptTextMessage(receiverId, plainText) {
-            const ready = await this.ensureE2EEReady();
-            if (!ready) return null;
-            const device = await this.getRecipientDeviceKey(receiverId);
-            if (!device) return null;
-            const aesKey = await this.deriveAesKeyFromDevice(device);
-            const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
-            const encoded = new TextEncoder().encode(plainText);
-            const encryptedBuffer = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBytes }, aesKey, encoded);
-            return {
-                encrypted: true,
-                e2ee_v: 1,
-                alg: 'AES-256-GCM',
-                sender_device_id: this.e2ee.deviceId,
-                key_id: this.e2ee.keyId,
-                iv: this.bytesToBase64Url(ivBytes),
-                ciphertext: this.bytesToBase64Url(new Uint8Array(encryptedBuffer)),
-            };
+            try {
+                const ready = await this.ensureE2EEReady();
+                if (!ready) return null;
+                const device = await this.getRecipientDeviceKey(receiverId);
+                if (!device) return null;
+                const aesKey = await this.deriveAesKeyFromDevice(device);
+                const ivBytes = window.crypto.getRandomValues(new Uint8Array(12));
+                const encoded = new TextEncoder().encode(plainText);
+                const encryptedBuffer = await window.crypto.subtle.encrypt({ name: 'AES-GCM', iv: ivBytes }, aesKey, encoded);
+                return {
+                    encrypted: true,
+                    e2ee_v: 1,
+                    alg: 'AES-256-GCM',
+                    sender_device_id: this.e2ee.deviceId,
+                    key_id: this.e2ee.keyId,
+                    iv: this.bytesToBase64Url(ivBytes),
+                    ciphertext: this.bytesToBase64Url(new Uint8Array(encryptedBuffer)),
+                };
+            } catch (err) {
+                console.warn('E2EE encryption failed, will send plaintext:', err);
+                return null;
+            }
         },
         async maybeDecryptMessage(msg) {
             if (!msg?.encrypted || !msg?.ciphertext || !msg?.iv) return msg;
@@ -1075,7 +1090,12 @@ const app = createApp({
             this.messageText = '';
             this.chatListOpen = false;
 
-            const encryptedPayload = await this.encryptTextMessage(this.currentConversationId, content);
+            let encryptedPayload = null;
+            try {
+                encryptedPayload = await this.encryptTextMessage(this.currentConversationId, content);
+            } catch (err) {
+                console.warn('Encryption error, sending plaintext:', err);
+            }
             if (this.e2ee.enabled && !encryptedPayload && !this.e2ee.noKeyWarnedRecipients[this.currentConversationId]) {
                 alert('ارسال امن ممکن نیست؛ کلید مخاطب در دسترس نیست. پیام به صورت غیر رمزنگاری‌شده ارسال می‌شود.');
                 this.e2ee.noKeyWarnedRecipients[this.currentConversationId] = true;
