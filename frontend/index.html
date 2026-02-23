@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -11,8 +12,13 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png">
     <link rel="stylesheet" href="/styles.css">
     <script src="/vue.global.prod.js"></script>
-    <style>[v-cloak] { display: none; }</style>
+    <style>
+        [v-cloak] {
+            display: none;
+        }
+    </style>
 </head>
+
 <body>
     <div id="app" v-cloak>
         <div class="auth-container" v-if="!isAuthed">
@@ -27,15 +33,17 @@
                 </div>
                 <div class="auth-tabs">
                     <button class="tab-btn" :class="{active: authTab==='login'}" @click="authTab='login'">ورود</button>
-                    <button class="tab-btn" :class="{active: authTab==='register'}" @click="authTab='register'">ثبت‌نام</button>
+                    <button class="tab-btn" :class="{active: authTab==='register'}"
+                        @click="authTab='register'">ثبت‌نام</button>
                 </div>
-                
+
                 <form v-if="authTab==='login'" class="auth-form" @submit.prevent="handleLogin">
                     <input type="text" v-model="login.username" placeholder="نام‌کاربری" required>
                     <input type="password" v-model="login.password" placeholder="رمز‌عبور" required>
                     <button type="submit">ورود امن</button>
                     <div class="error-message" v-if="authError">{{ authError }}</div>
-                    <div class="auth-hint">رمز عبور فقط برای باز کردن کلید رمزنگاری شما استفاده می‌شود و ذخیره نمی‌شود.</div>
+                    <div class="auth-hint">رمز عبور فقط برای باز کردن کلید رمزنگاری شما استفاده می‌شود و ذخیره نمی‌شود.
+                    </div>
                 </form>
 
                 <form v-else class="auth-form" @submit.prevent="handleRegister">
@@ -44,7 +52,8 @@
                     <input type="password" v-model="register.confirm" placeholder="تکرار رمز‌عبور" required>
                     <button type="submit">ثبت‌نام با رمزنگاری</button>
                     <div class="error-message" v-if="authError">{{ authError }}</div>
-                    <div class="auth-hint">کلید خصوصی شما فقط رمزنگاری‌شده روی سرور پشتیبان‌گیری می‌شود تا در دستگاه‌های دیگر بازیابی شود.</div>
+                    <div class="auth-hint">کلید خصوصی شما فقط رمزنگاری‌شده روی سرور پشتیبان‌گیری می‌شود تا در دستگاه‌های
+                        دیگر بازیابی شود.</div>
                     <label class="rules-checkbox">
                         <input type="checkbox" v-model="acceptRules">
                         <span>قوانین و حریم خصوصی را می‌پذیرم</span>
@@ -65,9 +74,12 @@
                 <div class="modal-body">
                     <ul class="rules-list">
                         <li>پیام‌ها بین کاربرانی که کلید دارند، به صورت سرتاسری (E2EE) رمزنگاری می‌شود.</li>
-                        <li>اگر طرف مقابل هنوز کلید منتشر نکرده باشد، پیام شما به‌صورت متن ساده ارسال می‌شود تا قابل خواندن بماند.</li>
-                        <li>کلید خصوصی فقط به شکل رمزنگاری‌شده روی سرور پشتیبان‌گیری می‌شود و بدون رمز عبور شما قابل استفاده نیست.</li>
-                        <li>مسئولیت محتوای پیام‌ها، تخلفات و عواقب حقوقی بر عهده فرستنده و دریافت‌کننده است؛ سرویس مسئولیتی ندارد.</li>
+                        <li>اگر طرف مقابل هنوز کلید منتشر نکرده باشد، پیام شما به‌صورت متن ساده ارسال می‌شود تا قابل
+                            خواندن بماند.</li>
+                        <li>کلید خصوصی فقط به شکل رمزنگاری‌شده روی سرور پشتیبان‌گیری می‌شود و بدون رمز عبور شما قابل
+                            استفاده نیست.</li>
+                        <li>مسئولیت محتوای پیام‌ها، تخلفات و عواقب حقوقی بر عهده فرستنده و دریافت‌کننده است؛ سرویس
+                            مسئولیتی ندارد.</li>
                         <li>از ارسال هرگونه محتوای غیرقانونی، آزاردهنده یا نقض‌کننده حقوق دیگران خودداری کنید.</li>
                     </ul>
                 </div>
@@ -90,17 +102,7 @@
                         <div class="user-profile-name">{{ profileDisplayName || (username) }}</div>
                         <div class="user-profile-status">{{ userProfileStatusText }}</div>
                     </div>
-                    <button class="logout-btn" @click="handleLogout">خروج</button>
                 </div>
-                
-                <div class="panel-header">
-                    <h2>پیام‌ها</h2>
-                    <button class="icon-btn ghost" @click="openNewChat" aria-label="مکالمه جدید">＋</button>
-                </div>
-                <!-- <div class="search-bar">
-                    <span class="icon-text" aria-hidden="true">⌕</span>
-                    <input type="text" v-model="searchQuery" placeholder="جستجو مکالمه..." aria-label="جستجو مکالمه">
-                </div> -->
                 <div class="conversations-list">
                     <div v-if="loadingConversations" class="conversation-skeleton-list">
                         <div v-for="n in 6" :key="'skeleton-' + n" class="conversation-item skeleton">
@@ -111,12 +113,8 @@
                         </div>
                     </div>
                     <div v-else-if="filteredConversations.length === 0" class="empty-state">هیچ مکالمه‌ای نیست</div>
-                    <div v-else 
-                        v-for="conv in filteredConversations" 
-                        :key="conv.id"
-                        class="conversation-item"
-                        :class="{active: conv.user_id === currentConversationId}"
-                        @click="selectConversation(conv)">
+                    <div v-else v-for="conv in filteredConversations" :key="conv.id" class="conversation-item"
+                        :class="{active: conv.user_id === currentConversationId}" @click="selectConversation(conv)">
                         <div class="conversation-avatar">
                             <img v-if="conv.avatar_url" :src="conv.avatar_url" alt="آواتار" class="avatar-img">
                             <span v-else>{{ conv.username ? conv.username.charAt(0).toUpperCase() : '?' }}</span>
@@ -127,13 +125,24 @@
                         </div>
                         <div class="conversation-actions">
                             <div v-if="conv.unread_count > 0" class="unread-badge">{{ conv.unread_count }}</div>
-                            <button class="conversation-menu-btn" @click.stop="openConversationMenu($event, conv)" aria-label="گزینه‌های مکالمه">⋯</button>
+                            <button class="conversation-menu-btn" @click.stop="openConversationMenu($event, conv)"
+                                aria-label="گزینه‌های مکالمه">⋯</button>
                         </div>
                     </div>
                 </div>
 
+                <!-- Floating Action Button -->
+                <button class="fab-new-chat" @click="openNewChat" aria-label="مکالمه جدید" title="مکالمه جدید">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
+
                 <!-- Conversation Menu -->
-                <div v-if="conversationMenu.show" class="context-menu" :style="{top: conversationMenu.y + 'px', left: conversationMenu.x + 'px'}" @click.stop>
+                <div v-if="conversationMenu.show" class="context-menu"
+                    :style="{top: conversationMenu.y + 'px', left: conversationMenu.x + 'px'}" @click.stop>
                     <button class="context-menu-item delete" @click="deleteConversation(conversationMenu.conversation)">
                         <span class="context-menu-icon">🗑️</span>
                         <span>حذف مکالمه</span>
@@ -146,22 +155,27 @@
             <div class="chat-panel" :class="{'mobile-hide': chatListOpen}">
                 <div class="panel-header">
                     <div class="chat-header-info">
-                        <button class="icon-btn ghost back-btn mobile-only" @click="goBackToList" aria-label="بازگشت" v-if="currentConversationId">→</button>
+                        <button class="icon-btn ghost back-btn mobile-only" @click="goBackToList" aria-label="بازگشت"
+                            v-if="currentConversationId">→</button>
                         <span v-if="!currentConversationId" class="select-chat">یک مکالمه را انتخاب کنید</span>
                         <template v-else>
                             <div class="chat-header-avatar-wrapper">
-                                <img v-if="currentConversationAvatarUrl" :src="currentConversationAvatarUrl" class="chat-header-avatar" alt="avatar">
-                                <span v-else class="chat-header-avatar-placeholder">{{ (currentConversationDisplayName || currentConversationUsername || '?').charAt(0).toUpperCase() }}</span>
+                                <img v-if="currentConversationAvatarUrl" :src="currentConversationAvatarUrl"
+                                    class="chat-header-avatar" alt="avatar">
+                                <span v-else class="chat-header-avatar-placeholder">{{ (currentConversationDisplayName
+                                    || currentConversationUsername || '?').charAt(0).toUpperCase() }}</span>
                                 <span v-if="currentConversationIsOnline" class="online-indicator"></span>
                             </div>
                             <div class="chat-header-text">
-                                <span class="chat-header-name">{{ currentConversationDisplayName || ( currentConversationUsername) }}</span>
+                                <span class="chat-header-name">{{ currentConversationDisplayName || (
+                                    currentConversationUsername) }}</span>
                                 <span class="chat-header-status" v-if="currentConversationIsOnline">آنلاین</span>
                             </div>
                         </template>
                     </div>
                     <div class="header-actions">
-                        <button class="icon-btn ghost call-btn" v-if="currentConversationId" @click="startCall" aria-label="تماس صوتی">📞</button>
+                        <button class="icon-btn ghost call-btn" v-if="currentConversationId" @click="startCall"
+                            aria-label="تماس صوتی">📞</button>
                         <!-- <button class="icon-btn ghost" v-show="currentConversationId" @click="shareProfile" aria-label="اشتراک پروفایل">↗</button> -->
                     </div>
                 </div>
@@ -178,32 +192,38 @@
                     </div>
                 </div>
 
-                <div class="messages-container" 
-                    @scroll="handleMessagesScroll"
-                    @touchstart="handlePullStart"
-                    @touchmove="handlePullMove"
-                    @touchend="handlePullEnd">
+                <div class="messages-container" @scroll="handleMessagesScroll" @touchstart="handlePullStart"
+                    @touchmove="handlePullMove" @touchend="handlePullEnd">
                     <div v-if="!currentConversationId" class="empty-state">یک مکالمه را انتخاب کنید</div>
                     <div v-else-if="loadingMessages" class="empty-state">در حال بارگذاری...</div>
                     <div v-else-if="messagesForCurrent.length === 0" class="empty-state">هنوز پیام‌ای وجود ندارد</div>
                     <div v-else>
-                        <div v-if="loadingOlderMessages" class="loading-older">در حال بارگذاری پیام‌های قدیمی‌تر...</div>
-                        <div v-if="hasMoreMessages[currentConversationId] && !loadingOlderMessages" class="load-more-hint">برای بارگذاری پیام‌های قدیمی‌تر به بالا اسکرول کنید</div>
-                        <div v-for="(msg, msgIndex) in messagesForCurrent" :key="msg.id || msg.client_message_id" class="message" :class="Number(msg.sender_id) === Number(userId) ? 'sent' : 'received'">
+                        <div v-if="loadingOlderMessages" class="loading-older">در حال بارگذاری پیام‌های قدیمی‌تر...
+                        </div>
+                        <div v-if="hasMoreMessages[currentConversationId] && !loadingOlderMessages"
+                            class="load-more-hint">برای بارگذاری پیام‌های قدیمی‌تر به بالا اسکرول کنید</div>
+                        <div v-for="(msg, msgIndex) in messagesForCurrent" :key="msg.id || msg.client_message_id"
+                            class="message" :class="Number(msg.sender_id) === Number(userId) ? 'sent' : 'received'">
                             <div class="message-bubble">
                                 <template v-if="msg.file_url">
                                     <template v-if="isImageMessage(msg)">
                                         <div class="media-message image-message">
                                             <a :href="msg.file_url" target="_blank" class="message-image-link">
-                                                <img :src="msg.file_url" class="message-image" :alt="msg.file_name || 'image'">
+                                                <img :src="msg.file_url" class="message-image"
+                                                    :alt="msg.file_name || 'image'">
                                             </a>
-                                            <a :href="msg.file_url" target="_blank" class="media-download" :download="msg.file_name || true" title="دانلود تصویر" aria-label="دانلود تصویر">⤓</a>
+                                            <a :href="msg.file_url" target="_blank" class="media-download"
+                                                :download="msg.file_name || true" title="دانلود تصویر"
+                                                aria-label="دانلود تصویر">⤓</a>
                                         </div>
                                     </template>
                                     <template v-else-if="isVideoMessage(msg)">
                                         <div class="media-message video-message">
-                                            <video :src="msg.file_url" class="message-video" controls preload="metadata"></video>
-                                            <a :href="msg.file_url" target="_blank" class="media-download" :download="msg.file_name || true" title="دانلود ویدیو" aria-label="دانلود ویدیو">⤓</a>
+                                            <video :src="msg.file_url" class="message-video" controls
+                                                preload="metadata"></video>
+                                            <a :href="msg.file_url" target="_blank" class="media-download"
+                                                :download="msg.file_name || true" title="دانلود ویدیو"
+                                                aria-label="دانلود ویدیو">⤓</a>
                                         </div>
                                     </template>
                                     <template v-else-if="isAudioMessage(msg)">
@@ -222,28 +242,28 @@
                             <div class="message-footer">
                                 <div class="message-meta">
                                     <span class="message-time">{{ formatTime(msg.created_at) }}</span>
-                                    <span v-if="shouldShowMessageStatus(msg, msgIndex)" class="message-status">{{ formatStatus(msg) }}</span>
+                                    <span v-if="shouldShowMessageStatus(msg, msgIndex)" class="message-status">{{
+                                        formatStatus(msg) }}</span>
                                 </div>
-                                <button 
-                                    v-if="Number(msg.sender_id) === Number(userId)" 
-                                    class="message-menu-btn" 
-                                    @click.stop="openContextMenu($event, msg)"
-                                    aria-label="گزینه‌های پیام">⋯</button>
+                                <button v-if="Number(msg.sender_id) === Number(userId)" class="message-menu-btn"
+                                    @click.stop="openContextMenu($event, msg)" aria-label="گزینه‌های پیام">⋯</button>
                             </div>
                         </div>
                     </div>
                 </div>
                 <!-- Pull to refresh indicator (anchored above input bar) -->
-                <div v-if="currentConversationId" class="pull-to-refresh-indicator" 
+                <div v-if="currentConversationId" class="pull-to-refresh-indicator"
                     :class="{ visible: pullToRefresh.pulling || pullToRefresh.refreshing, ready: pullToRefresh.currentY >= pullToRefresh.threshold }"
                     :style="(pullToRefresh.pulling || pullToRefresh.refreshing) ? { transform: `translateY(-${pullToRefresh.currentY}px)` } : null">
                     <div v-if="pullToRefresh.refreshing" class="refresh-spinner">↻</div>
-                    <div v-else-if="pullToRefresh.currentY >= pullToRefresh.threshold" class="refresh-hint">رها کنید</div>
+                    <div v-else-if="pullToRefresh.currentY >= pullToRefresh.threshold" class="refresh-hint">رها کنید
+                    </div>
                     <div v-else class="refresh-hint">برای بروزرسانی به بالا بکشید</div>
                 </div>
 
                 <!-- Context Menu -->
-                <div v-if="contextMenu.show" class="context-menu" :style="{top: contextMenu.y + 'px', left: contextMenu.x + 'px'}" @click.stop>
+                <div v-if="contextMenu.show" class="context-menu"
+                    :style="{top: contextMenu.y + 'px', left: contextMenu.x + 'px'}" @click.stop>
                     <button class="context-menu-item delete" @click="deleteMessage">
                         <span class="context-menu-icon">🗑️</span>
                         <span>حذف پیام</span>
@@ -254,15 +274,14 @@
                 <div class="message-input-area" v-show="currentConversationId">
                     <div class="input-container">
                         <input type="file" ref="fileInput" @change="handleFileSelect" style="display: none">
-                        <button class="icon-btn ghost" @click="$refs.fileInput.click()" aria-label="پیوست فایل">📎</button>
-                        <button
-                            class="icon-btn ghost"
-                            :class="{ recording: recordingVoice }"
-                            @click="toggleVoiceRecording"
-                            :disabled="uploadingFile || sendingVoice"
+                        <button class="icon-btn ghost" @click="$refs.fileInput.click()"
+                            aria-label="پیوست فایل">📎</button>
+                        <button class="icon-btn ghost" :class="{ recording: recordingVoice }"
+                            @click="toggleVoiceRecording" :disabled="uploadingFile || sendingVoice"
                             :aria-label="recordingVoice ? 'توقف ضبط' : 'ضبط صدا'"
                             :title="recordingVoice ? 'توقف ضبط و ارسال' : 'ضبط پیام صوتی'">🎤</button>
-                        <input type="text" v-model="messageText" placeholder="پیام..." aria-label="نوشتن پیام" @keyup.enter="sendMessage">
+                        <input type="text" v-model="messageText" placeholder="پیام..." aria-label="نوشتن پیام"
+                            @keyup.enter="sendMessage">
                         <button class="icon-btn solid" @click="sendMessage" aria-label="ارسال">></button>
                     </div>
                     <div v-if="recordingVoice" class="recording-indicator">
@@ -281,76 +300,105 @@
                         <button class="close-btn" @click="closeNewChatModal" aria-label="بستن">✕</button>
                     </div>
                     <div class="search-user-container">
-                        <input
-                            type="text"
-                            ref="newChatSearchInput"
-                            class="search-user-input"
-                            v-model="newChatSearchQuery"
-                            @input="onNewChatSearchInput"
-                            placeholder="نام کاربری را جستجو کنید..."
-                        >
+                        <input type="text" ref="newChatSearchInput" class="search-user-input"
+                            v-model="newChatSearchQuery" @input="onNewChatSearchInput"
+                            placeholder="نام کاربری را جستجو کنید...">
                     </div>
                     <div class="users-list">
                         <p v-if="!newChatSearchQuery.trim()" class="search-hint">نام کاربری را وارد کنید</p>
                         <p v-else-if="newChatSearchLoading" class="searching">در حال جستجو...</p>
                         <p v-else-if="newChatSearchError" class="empty">{{ newChatSearchError }}</p>
                         <p v-else-if="newChatSearchResults.length === 0" class="empty">کاربری یافت نشد</p>
-                        <user-search-item
-                            v-else
-                            v-for="user in newChatSearchResults"
-                            :key="user.id"
-                            :user="user"
-                            @select="handleSelectSearchedUser"
-                        ></user-search-item>
+                        <user-search-item v-else v-for="user in newChatSearchResults" :key="user.id" :user="user"
+                            @select="handleSelectSearchedUser"></user-search-item>
                     </div>
                 </div>
             </div>
 
             <!-- Profile Modal -->
             <div class="modal" v-if="showProfileModal" @click.self="showProfileModal = false">
-                <div class="modal-content">
+                <div class="modal-content profile-modal-sheet">
                     <div class="modal-header">
                         <h3>پروفایل</h3>
                         <button class="close-btn" @click="showProfileModal = false">×</button>
                     </div>
                     <div class="profile-modal-content">
+                        <!-- Avatar Section -->
                         <div class="profile-avatar-section">
-                            <div class="profile-avatar-large" @click="$refs.avatarInput.click()" style="cursor: pointer;">
+                            <div class="profile-avatar-large" @click="$refs.avatarInput.click()"
+                                style="cursor: pointer;">
                                 <img v-if="myAvatarUrl" :src="myAvatarUrl" alt="آواتار" class="avatar-img-large">
                                 <span v-else>{{ username ? username.charAt(0).toUpperCase() : '?' }}</span>
+                                <div class="avatar-edit-overlay">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path
+                                            d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z">
+                                        </path>
+                                        <circle cx="12" cy="13" r="4"></circle>
+                                    </svg>
+                                </div>
                             </div>
-                            <input type="file" ref="avatarInput" @change="handleAvatarUpload" accept="image/*" style="display: none">
-                            <div style="font-size: 0.85rem; color: var(--muted);">برای تغییر آواتار کلیک کنید</div>
-                            <div v-if="uploadingAvatar" style="font-size: 0.85rem; color: var(--primary);">در حال آپلود...</div>
+                            <input type="file" ref="avatarInput" @change="handleAvatarUpload" accept="image/*"
+                                style="display: none">
+                            <div class="profile-avatar-name">{{ profileDisplayName || username }}</div>
+                            <button class="btn-logout-inline" @click="handleLogout">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                                    <polyline points="16 17 21 12 16 7"></polyline>
+                                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                                </svg>
+                                خروج از حساب
+                            </button>
+                            <div v-if="uploadingAvatar" class="avatar-upload-status">در حال آپلود...</div>
                         </div>
-                        <div class="profile-form">
+
+                        <!-- Profile Info Section -->
+                        <div class="profile-section">
                             <div class="profile-form-group">
                                 <label>نام کاربری</label>
                                 <input type="text" :value="username" disabled>
                             </div>
                             <div class="profile-form-group">
                                 <label>نام نمایشی</label>
-                                <input type="text" v-model="profileDisplayName" placeholder="نام نمایشی خود را وارد کنید">
+                                <input type="text" v-model="profileDisplayName"
+                                    placeholder="نام نمایشی خود را وارد کنید">
                             </div>
-                            <div class="profile-actions">
-                                <button class="btn-secondary" @click="showProfileModal = false">بستن</button>
-                                <button class="btn-primary" @click="saveProfile">ذخیره</button>
-                            </div>
+                        </div>
+
+                        <!-- Settings Section -->
+                        <div class="profile-section">
                             <div class="profile-form-group push-toggle-group">
                                 <label>اعلان پیام جدید</label>
                                 <label class="toggle-switch">
-                                    <input type="checkbox" v-model="pushNotificationsEnabled" @change="togglePushNotifications">
+                                    <input type="checkbox" v-model="pushNotificationsEnabled"
+                                        @change="togglePushNotifications">
                                     <span class="toggle-slider"></span>
                                 </label>
                             </div>
+                        </div>
+
+                        <!-- Danger Zone -->
+                        <div class="profile-section">
                             <details class="profile-danger-zone">
                                 <summary class="danger-summary">حذف حساب کاربری</summary>
-                                <div class="danger-text">برای حذف حساب، نام کاربری خود را وارد کنید. این عملیات غیرقابل بازگشت است.</div>
-                                <input type="text" v-model="deleteAccountConfirm" placeholder="نام کاربری" class="danger-input">
-                                <button class="btn-danger" @click="deleteAccount" :disabled="deletingAccount || deleteAccountConfirm.trim() !== username">
+                                <div class="danger-text">برای حذف حساب، نام کاربری خود را وارد کنید. این عملیات غیرقابل
+                                    بازگشت است.</div>
+                                <input type="text" v-model="deleteAccountConfirm" placeholder="نام کاربری"
+                                    class="danger-input">
+                                <button class="btn-danger" @click="deleteAccount"
+                                    :disabled="deletingAccount || deleteAccountConfirm.trim() !== username">
                                     {{ deletingAccount ? 'در حال حذف...' : 'حذف حساب' }}
                                 </button>
                             </details>
+                        </div>
+                    </div>
+
+                    <!-- Sticky Footer -->
+                    <div class="profile-modal-footer">
+                        <div class="profile-footer-actions">
+                            <button class="btn-primary" @click="saveProfile">ذخیره تغییرات</button>
                         </div>
                     </div>
                 </div>
@@ -440,4 +488,5 @@
         }
     </script>
 </body>
+
 </html>
