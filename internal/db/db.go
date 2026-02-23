@@ -180,6 +180,23 @@ func (db *DB) migrate() error {
 	db.conn.Exec("ALTER TABLE user_device_keys ADD COLUMN key_wrap_version INTEGER")
 	db.conn.Exec("ALTER TABLE user_device_keys ADD COLUMN updated_at TIMESTAMP")
 
+	// Web Push subscriptions table
+	db.conn.Exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		endpoint TEXT NOT NULL,
+		p256dh TEXT NOT NULL,
+		auth TEXT NOT NULL,
+		user_agent TEXT,
+		device_label TEXT,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		revoked_at TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id)
+	)`)
+	db.conn.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_push_subscriptions_endpoint_unique ON push_subscriptions(endpoint)")
+	db.conn.Exec("CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user_id ON push_subscriptions(user_id)")
+	db.conn.Exec("CREATE INDEX IF NOT EXISTS idx_push_subscriptions_active ON push_subscriptions(user_id, revoked_at)")
+
 	return nil
 }
 

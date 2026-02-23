@@ -109,10 +109,26 @@ func TestMain(m *testing.M) {
 			revoked_at TIMESTAMP,
 			UNIQUE (user_id, device_id, key_id)
 		);
+
+		CREATE TABLE IF NOT EXISTS push_subscriptions (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			endpoint TEXT NOT NULL,
+			p256dh TEXT NOT NULL,
+			auth TEXT NOT NULL,
+			user_agent TEXT,
+			device_label TEXT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			revoked_at TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id)
+		);
 	`)
 	if err != nil {
 		panic(err)
 	}
+
+	// Create unique index required for ON CONFLICT(endpoint)
+	testDB.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_push_subscriptions_endpoint_unique ON push_subscriptions(endpoint)")
 
 	testUploadDir, err = os.MkdirTemp("", "payambar-test-uploads")
 	if err != nil {
@@ -133,7 +149,7 @@ func setupTestRouter() *gin.Engine {
 	router := gin.New()
 
 	authHandler := NewAuthHandler(testAuthSvc)
-	msgHandler := NewMessageHandler(testDB, nil, testUploadDir, 10_485_760, "", "", "", "")
+	msgHandler := NewMessageHandler(testDB, nil, testUploadDir, 10_485_760, "", "", "", "", nil)
 
 	api := router.Group("/api")
 	{
@@ -155,12 +171,17 @@ func setupTestRouter() *gin.Engine {
 		protected.PUT("/messages/:id/delivered", msgHandler.MarkAsDelivered)
 		protected.PUT("/messages/:id/read", msgHandler.MarkAsRead)
 		protected.DELETE("/profile", msgHandler.DeleteAccount)
+		protected.POST("/push/subscribe", msgHandler.SubscribePush)
+		protected.DELETE("/push/subscribe", msgHandler.UnsubscribePush)
 	}
+
+	api.GET("/push/vapid-key", msgHandler.GetVAPIDKey)
 
 	return router
 }
 
 func clearTestData() {
+	testDB.Exec("DELETE FROM push_subscriptions")
 	testDB.Exec("DELETE FROM files")
 	testDB.Exec("DELETE FROM messages")
 	testDB.Exec("DELETE FROM conversation_participants")
@@ -907,4 +928,128 @@ func TestDeviceKeysAPI(t *testing.T) {
 	if selfDevice["enc_private_key"] != "encpk" || selfDevice["kdf_alg"] != "PBKDF2-SHA256" {
 		t.Fatalf("expected encrypted fields in self response")
 	}
+}
+
+func TestPushSubscribe(t *testing.T) {
+	clearTestData()
+
+	user1ID, _ := testAuthSvc.Register("pushuser1", "password123")
+	token1, _ := testAuthSvc.GenerateToken(user1ID, "pushuser1")
+
+	t.Run("subscribe push", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]interface{}{
+			"endpoint": "https://push.example.com/sub/abc123",
+			"keys": map[string]string{
+				"p256dh": "test-p256dh-key",
+				"auth":   "test-auth-key",
+			},
+		})
+		req := httptest.NewRequest("POST", "/api/push/subscribe", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token1)
+		w := httptest.NewRecorder()
+
+		testRouter.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("SubscribePush() status = %d, want 200, body=%s", w.Code, w.Body.String())
+		}
+
+		// Verify DB has the subscription
+		var count int
+		testDB.QueryRow("SELECT COUNT(*) FROM push_subscriptions WHERE user_id = ?", user1ID).Scan(&count)
+		if count != 1 {
+			t.Fatalf("Expected 1 push subscription, got %d", count)
+		}
+	})
+
+	t.Run("subscribe push replaces existing endpoint", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]interface{}{
+			"endpoint": "https://push.example.com/sub/abc123",
+			"keys": map[string]string{
+				"p256dh": "updated-p256dh-key",
+				"auth":   "updated-auth-key",
+			},
+		})
+		req := httptest.NewRequest("POST", "/api/push/subscribe", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token1)
+		w := httptest.NewRecorder()
+
+		testRouter.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("Re-subscribe status = %d, want 200", w.Code)
+		}
+
+		// Should still be 1 subscription (upsert)
+		var count int
+		testDB.QueryRow("SELECT COUNT(*) FROM push_subscriptions WHERE user_id = ?", user1ID).Scan(&count)
+		if count != 1 {
+			t.Fatalf("Expected 1 push subscription after re-subscribe, got %d", count)
+		}
+
+		// Verify keys were updated
+		var p256dh string
+		testDB.QueryRow("SELECT p256dh FROM push_subscriptions WHERE user_id = ?", user1ID).Scan(&p256dh)
+		if p256dh != "updated-p256dh-key" {
+			t.Fatalf("Expected updated p256dh key, got %s", p256dh)
+		}
+	})
+
+	t.Run("subscribe push unauthenticated", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]interface{}{
+			"endpoint": "https://push.example.com/sub/xyz",
+			"keys": map[string]string{
+				"p256dh": "key1",
+				"auth":   "key2",
+			},
+		})
+		req := httptest.NewRequest("POST", "/api/push/subscribe", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		testRouter.ServeHTTP(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("Unauthenticated subscribe status = %d, want 401", w.Code)
+		}
+	})
+
+	t.Run("unsubscribe push", func(t *testing.T) {
+		body, _ := json.Marshal(map[string]interface{}{
+			"endpoint": "https://push.example.com/sub/abc123",
+		})
+		req := httptest.NewRequest("DELETE", "/api/push/subscribe", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token1)
+		w := httptest.NewRecorder()
+
+		testRouter.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("UnsubscribePush() status = %d, want 200", w.Code)
+		}
+
+		// Verify subscription was removed
+		var count int
+		testDB.QueryRow("SELECT COUNT(*) FROM push_subscriptions WHERE user_id = ? AND revoked_at IS NULL", user1ID).Scan(&count)
+		if count != 0 {
+			t.Fatalf("Expected 0 active push subscriptions after unsubscribe, got %d", count)
+		}
+	})
+}
+
+func TestGetVAPIDKey(t *testing.T) {
+	t.Run("no vapid key configured", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/push/vapid-key", nil)
+		w := httptest.NewRecorder()
+
+		testRouter.ServeHTTP(w, req)
+
+		// Handler has no vapid key (nil pushNotifier), should return 404
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("GetVAPIDKey() without key status = %d, want 404", w.Code)
+		}
+	})
 }

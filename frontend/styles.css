@@ -848,6 +848,60 @@ button {
     padding: 2rem 1rem;
 }
 
+/* Push toggle in profile */
+.push-toggle-group {
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 0;
+    border-top: 1px solid var(--border);
+    margin-top: 0.5rem;
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 26px;
+    flex-shrink: 0;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    inset: 0;
+    background: #ccc;
+    border-radius: 26px;
+    transition: background 0.25s ease;
+}
+
+.toggle-slider::before {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    top: 3px;
+    right: 3px;
+    transition: transform 0.25s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--auth-accent);
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(-20px);
+}
+
 .profile-danger-zone {
     margin-top: 1.25rem;
     padding: 1rem;

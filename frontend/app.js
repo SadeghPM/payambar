@@ -129,6 +129,8 @@ const app = createApp({
             // Offline state
             isOffline: !navigator.onLine,
             serverOffline: false,
+            // Push notification state
+            pushNotificationsEnabled: false,
             // Pull to refresh state
             pullToRefresh: {
                 startY: 0,
@@ -199,6 +201,7 @@ const app = createApp({
             this.ensureE2EEReady().catch((err) => console.warn('E2EE init skipped:', err));
             this.connectWebSocket();
             this.fetchWebRTCConfig();
+            this.restorePushSubscription();
         }
         // Listen for online/offline events
         window.addEventListener('online', () => {
@@ -914,6 +917,107 @@ const app = createApp({
             } catch (err) {
                 console.error('Error saving profile:', err);
                 alert('خطا در ذخیره پروفایل');
+            }
+        },
+        // ── Push Notifications ─────────────────────────────────────────────
+        async restorePushSubscription() {
+            const stored = localStorage.getItem('pushNotificationsEnabled');
+            if (stored === 'true') {
+                this.pushNotificationsEnabled = true;
+                // Re-subscribe silently to keep subscription fresh
+                try {
+                    await this.subscribePush();
+                } catch (err) {
+                    console.warn('Failed to restore push subscription:', err);
+                }
+            }
+        },
+        async togglePushNotifications() {
+            if (this.pushNotificationsEnabled) {
+                try {
+                    await this.subscribePush();
+                    localStorage.setItem('pushNotificationsEnabled', 'true');
+                } catch (err) {
+                    console.error('Push subscribe failed:', err);
+                    this.pushNotificationsEnabled = false;
+                    localStorage.removeItem('pushNotificationsEnabled');
+                    alert('فعال‌سازی اعلان‌ها ناموفق بود');
+                }
+            } else {
+                try {
+                    await this.unsubscribePush();
+                } catch (err) {
+                    console.error('Push unsubscribe failed:', err);
+                }
+                localStorage.removeItem('pushNotificationsEnabled');
+            }
+        },
+        async subscribePush() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                throw new Error('Push notifications not supported');
+            }
+
+            const permission = await Notification.requestPermission();
+            if (permission !== 'granted') {
+                throw new Error('Notification permission denied');
+            }
+
+            // Get VAPID public key from server
+            const vapidRes = await fetch(`${API_URL}/push/vapid-key`);
+            if (!vapidRes.ok) throw new Error('Push not configured on server');
+            const { vapid_public_key } = await vapidRes.json();
+
+            // Convert VAPID key to Uint8Array
+            const urlBase64ToUint8Array = (base64String) => {
+                const padding = '='.repeat((4 - base64String.length % 4) % 4);
+                const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+                const raw = atob(base64);
+                const arr = new Uint8Array(raw.length);
+                for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+                return arr;
+            };
+
+            const reg = await navigator.serviceWorker.ready;
+            const subscription = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(vapid_public_key),
+            });
+
+            const subJSON = subscription.toJSON();
+            const res = await fetch(`${API_URL}/push/subscribe`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${this.token}`,
+                },
+                body: JSON.stringify({
+                    endpoint: subJSON.endpoint,
+                    keys: {
+                        p256dh: subJSON.keys.p256dh,
+                        auth: subJSON.keys.auth,
+                    },
+                }),
+            });
+            if (!res.ok) throw new Error('Server rejected subscription');
+        },
+        async unsubscribePush() {
+            try {
+                const reg = await navigator.serviceWorker.ready;
+                const subscription = await reg.pushManager.getSubscription();
+                if (subscription) {
+                    const subJSON = subscription.toJSON();
+                    await fetch(`${API_URL}/push/subscribe`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${this.token}`,
+                        },
+                        body: JSON.stringify({ endpoint: subJSON.endpoint }),
+                    });
+                    await subscription.unsubscribe();
+                }
+            } catch (err) {
+                console.warn('Unsubscribe error:', err);
             }
         },
         async deleteAccount() {

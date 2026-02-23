@@ -20,6 +20,8 @@ type Config struct {
 	TurnServer      string
 	TurnUsername    string
 	TurnPassword    string
+	VAPIDPublicKey  string
+	VAPIDPrivateKey string
 }
 
 func Load() *Config {
@@ -37,6 +39,8 @@ func Load() *Config {
 		TurnServer:      getEnv(fileEnv, "TURN_SERVER", ""),
 		TurnUsername:    getEnv(fileEnv, "TURN_USERNAME", ""),
 		TurnPassword:    getEnv(fileEnv, "TURN_PASSWORD", ""),
+		VAPIDPublicKey:  getEnv(fileEnv, "VAPID_PUBLIC_KEY", ""),
+		VAPIDPrivateKey: getEnv(fileEnv, "VAPID_PRIVATE_KEY", ""),
 	}
 }
 

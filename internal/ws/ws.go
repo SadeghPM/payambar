@@ -13,12 +13,18 @@ import (
 )
 
 type Hub struct {
-	clients    map[int]*Client
-	broadcast  chan interface{}
-	register   chan *Client
-	unregister chan *Client
-	db         *sql.DB
-	mu         sync.RWMutex
+	clients      map[int]*Client
+	broadcast    chan interface{}
+	register     chan *Client
+	unregister   chan *Client
+	db           *sql.DB
+	mu           sync.RWMutex
+	pushNotifier PushNotifier
+}
+
+// PushNotifier sends push notifications to offline users.
+type PushNotifier interface {
+	SendNewMessageNotification(receiverID int, senderUsername string)
 }
 
 type Client struct {
@@ -70,6 +76,11 @@ func NewHub(db *sql.DB) *Hub {
 		unregister: make(chan *Client),
 		db:         db,
 	}
+}
+
+// SetPushNotifier sets the push notifier on the hub.
+func (h *Hub) SetPushNotifier(pn PushNotifier) {
+	h.pushNotifier = pn
 }
 
 // IsUserOnline checks if a user is currently connected
@@ -159,6 +170,14 @@ func (h *Hub) broadcast_message(message interface{}) {
 					default:
 					}
 				}
+			} else if h.pushNotifier != nil {
+				// Receiver is offline — send push notification
+				var senderUsername string
+				h.db.QueryRow("SELECT username FROM users WHERE id = ?", msg.SenderID).Scan(&senderUsername)
+				if senderUsername == "" {
+					senderUsername = "someone"
+				}
+				go h.pushNotifier.SendNewMessageNotification(msg.ReceiverID, senderUsername)
 			}
 		} else if msg.Type == "status_update" {
 			// Broadcast status updates to both sender and receiver when available

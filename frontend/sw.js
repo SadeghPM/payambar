@@ -95,3 +95,47 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// ── Push notifications ──────────────────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload;
+  try {
+    payload = event.data.json();
+  } catch (e) {
+    payload = { title: 'پیام جدید', body: event.data.text() || 'پیام جدید دارید' };
+  }
+
+  const title = payload.title || 'پیام جدید';
+  const options = {
+    body: payload.body || 'پیام جدید دارید',
+    icon: '/favicon-192.png',
+    badge: '/favicon-96.png',
+    data: { url: payload.url || '/' },
+    tag: 'new-message',
+    renotify: true,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// ── Notification click ──────────────────────────────────────────────────────
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const url = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // Focus an existing window if available
+      for (const client of windowClients) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Otherwise open a new window
+      return clients.openWindow(url);
+    })
+  );
+});

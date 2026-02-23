@@ -336,6 +336,13 @@
                                 <button class="btn-secondary" @click="showProfileModal = false">بستن</button>
                                 <button class="btn-primary" @click="saveProfile">ذخیره</button>
                             </div>
+                            <div class="profile-form-group push-toggle-group">
+                                <label>اعلان پیام جدید</label>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" v-model="pushNotificationsEnabled" @change="togglePushNotifications">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
                             <details class="profile-danger-zone">
                                 <summary class="danger-summary">حذف حساب کاربری</summary>
                                 <div class="danger-text">برای حذف حساب، نام کاربری خود را وارد کنید. این عملیات غیرقابل بازگشت است.</div>

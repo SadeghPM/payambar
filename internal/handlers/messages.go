@@ -41,16 +41,24 @@ type MessageBroadcaster interface {
 	BroadcastMessage(messageID, senderID, receiverID int, content, status, fileName, fileURL, fileType string)
 }
 
+// PushNotifier sends push notifications to offline users
+type PushNotifier interface {
+	SendNewMessageNotification(receiverID int, senderUsername string)
+	VAPIDPublicKey() string
+}
+
 type MessageHandler struct {
-	db            *sql.DB
-	onlineChecker OnlineChecker
-	broadcaster   MessageBroadcaster
-	uploadDir     string
-	maxUploadSize int64
-	stunServers   string
-	turnServer    string
-	turnUsername  string
-	turnPassword  string
+	db             *sql.DB
+	onlineChecker  OnlineChecker
+	broadcaster    MessageBroadcaster
+	pushNotifier   PushNotifier
+	uploadDir      string
+	maxUploadSize  int64
+	stunServers    string
+	turnServer     string
+	turnUsername   string
+	turnPassword   string
+	vapidPublicKey string
 }
 
 func isLocalUploadPath(uploadDir, filePath string) bool {
@@ -84,21 +92,27 @@ func localPathFromAvatarURL(avatarURL, uploadDir string) (string, bool) {
 	return filepath.Join(uploadDir, fileName), true
 }
 
-func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir string, maxUploadSize int64, stunServers, turnServer, turnUsername, turnPassword string) *MessageHandler {
+func NewMessageHandler(db *sql.DB, onlineChecker OnlineChecker, uploadDir string, maxUploadSize int64, stunServers, turnServer, turnUsername, turnPassword string, pushNotifier PushNotifier) *MessageHandler {
 	var broadcaster MessageBroadcaster
 	if b, ok := onlineChecker.(MessageBroadcaster); ok {
 		broadcaster = b
 	}
+	var vapidKey string
+	if pushNotifier != nil {
+		vapidKey = pushNotifier.VAPIDPublicKey()
+	}
 	return &MessageHandler{
-		db:            db,
-		onlineChecker: onlineChecker,
-		broadcaster:   broadcaster,
-		uploadDir:     uploadDir,
-		maxUploadSize: maxUploadSize,
-		stunServers:   stunServers,
-		turnServer:    turnServer,
-		turnUsername:  turnUsername,
-		turnPassword:  turnPassword,
+		db:             db,
+		onlineChecker:  onlineChecker,
+		broadcaster:    broadcaster,
+		pushNotifier:   pushNotifier,
+		uploadDir:      uploadDir,
+		maxUploadSize:  maxUploadSize,
+		stunServers:    stunServers,
+		turnServer:     turnServer,
+		turnUsername:   turnUsername,
+		turnPassword:   turnPassword,
+		vapidPublicKey: vapidKey,
 	}
 }
 
@@ -1440,4 +1454,82 @@ func (h *MessageHandler) GetWebRTCConfig(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"iceServers": iceServers})
+}
+
+// GetVAPIDKey returns the public VAPID key for push subscription
+func (h *MessageHandler) GetVAPIDKey(c *gin.Context) {
+	if h.vapidPublicKey == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": __("push notifications not configured")})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"vapid_public_key": h.vapidPublicKey})
+}
+
+// SubscribePush saves or updates a push subscription for the current user
+func (h *MessageHandler) SubscribePush(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
+		return
+	}
+
+	var req struct {
+		Endpoint string `json:"endpoint" binding:"required"`
+		Keys     struct {
+			P256dh string `json:"p256dh" binding:"required"`
+			Auth   string `json:"auth" binding:"required"`
+		} `json:"keys" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid request")})
+		return
+	}
+
+	currentUserID := userID.(int)
+
+	// Upsert — if endpoint already exists (maybe from a different user or re-subscribe), replace it
+	_, err := h.db.Exec(`
+		INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(endpoint) DO UPDATE SET user_id = ?, p256dh = ?, auth = ?, revoked_at = NULL
+	`, currentUserID, req.Endpoint, req.Keys.P256dh, req.Keys.Auth,
+		currentUserID, req.Keys.P256dh, req.Keys.Auth)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to save subscription")})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "subscribed"})
+}
+
+// UnsubscribePush removes a push subscription for the current user
+func (h *MessageHandler) UnsubscribePush(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": __("unauthorized")})
+		return
+	}
+
+	var req struct {
+		Endpoint string `json:"endpoint" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": __("invalid request")})
+		return
+	}
+
+	currentUserID := userID.(int)
+
+	_, err := h.db.Exec(
+		"UPDATE push_subscriptions SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = ? AND endpoint = ?",
+		currentUserID, req.Endpoint,
+	)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": __("failed to remove subscription")})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "unsubscribed"})
 }

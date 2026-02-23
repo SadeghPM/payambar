@@ -105,6 +105,23 @@ generate_jwt_secret() {
   fi
 }
 
+generate_vapid_keys() {
+  # Generate VAPID keypair for Web Push notifications using openssl
+  require_cmd openssl
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  openssl ecparam -genkey -name prime256v1 -noout -out "${tmpdir}/vapid_private.pem" 2>/dev/null
+  # Extract raw private key (32 bytes) as base64url
+  VAPID_PRIVATE_KEY=$(openssl ec -in "${tmpdir}/vapid_private.pem" -outform DER 2>/dev/null \
+    | tail -c +8 | head -c 32 \
+    | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+  # Extract raw public key (65 bytes, uncompressed) as base64url
+  VAPID_PUBLIC_KEY=$(openssl ec -in "${tmpdir}/vapid_private.pem" -pubout -outform DER 2>/dev/null \
+    | tail -c 65 \
+    | openssl base64 -A | tr '+/' '-_' | tr -d '=')
+  rm -rf "${tmpdir}"
+}
+
 is_elf_binary() {
   local file_path="$1"
   local magic
@@ -227,6 +244,7 @@ install_binary() {
 
 write_env_file() {
   if [ ! -f "${ENV_FILE}" ]; then
+    generate_vapid_keys
     cat >"${ENV_FILE}" <<EOF
 PORT=8080
 ENVIRONMENT=production
@@ -239,6 +257,8 @@ STUN_SERVERS=stun:stun.l.google.com:19302
 TURN_SERVER=
 TURN_USERNAME=
 TURN_PASSWORD=
+VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
 EOF
     chmod 640 "${ENV_FILE}"
     chown root:root "${ENV_FILE}"

@@ -18,6 +18,7 @@ import (
 	"github.com/4xmen/payambar/internal/auth"
 	"github.com/4xmen/payambar/internal/db"
 	"github.com/4xmen/payambar/internal/handlers"
+	"github.com/4xmen/payambar/internal/push"
 	"github.com/4xmen/payambar/internal/ws"
 	"github.com/4xmen/payambar/pkg/config"
 	"github.com/gin-gonic/gin"
@@ -179,11 +180,22 @@ func runServer(cfg *config.Config) error {
 
 	// Initialize WebSocket hub
 	hub := ws.NewHub(database.GetConn())
+
+	// Initialize push notifier (only if VAPID keys are configured)
+	var pushNotifier *push.Notifier
+	if cfg.VAPIDPublicKey != "" && cfg.VAPIDPrivateKey != "" {
+		pushNotifier = push.NewNotifier(database.GetConn(), cfg.VAPIDPublicKey, cfg.VAPIDPrivateKey)
+		hub.SetPushNotifier(pushNotifier)
+		log.Println("Web Push notifications enabled")
+	} else {
+		log.Println("Web Push notifications disabled (no VAPID keys configured)")
+	}
+
 	go hub.Run()
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authSvc)
-	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub, cfg.FileStoragePath, cfg.MaxUploadSize, cfg.StunServers, cfg.TurnServer, cfg.TurnUsername, cfg.TurnPassword)
+	msgHandler := handlers.NewMessageHandler(database.GetConn(), hub, cfg.FileStoragePath, cfg.MaxUploadSize, cfg.StunServers, cfg.TurnServer, cfg.TurnUsername, cfg.TurnPassword, pushNotifier)
 
 	// Setup router
 	if cfg.Environment == "production" {
@@ -223,6 +235,9 @@ func runServer(cfg *config.Config) error {
 
 		// Public profile endpoint
 		api.GET("/users/:username", msgHandler.GetUserProfile)
+
+		// Push VAPID key (public)
+		api.GET("/push/vapid-key", msgHandler.GetVAPIDKey)
 	}
 
 	// Protected endpoints
@@ -251,6 +266,10 @@ func runServer(cfg *config.Config) error {
 
 		// WebRTC
 		protected.GET("/webrtc/config", msgHandler.GetWebRTCConfig)
+
+		// Push notifications
+		protected.POST("/push/subscribe", msgHandler.SubscribePush)
+		protected.DELETE("/push/subscribe", msgHandler.UnsubscribePush)
 	}
 
 	// Serve uploaded files from configured storage path

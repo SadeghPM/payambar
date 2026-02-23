@@ -44,7 +44,10 @@ run: build-backend
 
 # Dev (with frontend assets copied)
 dev: build-frontend
-	PORT=8080 DATABASE_PATH=./data/payambar.db JWT_SECRET=dev-secret-key go run ./cmd/payambar
+	PORT=8080 DATABASE_PATH=./data/payambar.db JWT_SECRET=dev-secret-key \
+	VAPID_PUBLIC_KEY=BK-m223f6sYwqN2cgyv7e5HSLMlXqEUyPuPUz4LVwlqVsjWQVLe7d_Gi9LVVtzb37yv1pPv9kbqiRFheGlcCOnk \
+	VAPID_PRIVATE_KEY=xDf-gMEdudmVDlRDY5B5u9p6u2Yte_r78_sjm0BOdoY \
+	go run ./cmd/payambar
 
 # Clean
 clean:
