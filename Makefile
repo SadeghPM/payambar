@@ -21,7 +21,10 @@ build-frontend:
 	cp frontend/apple-touch-icon.png cmd/payambar/static/
 	cp frontend/screenshot-540.png cmd/payambar/static/
 	cp frontend/screenshot-1280.png cmd/payambar/static/
-	@echo "Frontend built in cmd/payambar/static/"
+	# Inject build hash into sw.js so browsers detect frontend changes
+	$(eval BUILD_HASH := $(shell cat frontend/index.html frontend/styles.css frontend/app.js frontend/sw.js | shasum -a 256 | cut -c1-12))
+	sed -i.bak "s/__BUILD_HASH__/$(BUILD_HASH)/" cmd/payambar/static/sw.js && rm -f cmd/payambar/static/sw.js.bak
+	@echo "Frontend built in cmd/payambar/static/ (hash: $(BUILD_HASH))"
 
 # Build backend with embedded frontend (current OS)
 build-backend: build-frontend
