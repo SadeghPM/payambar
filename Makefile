@@ -26,11 +26,14 @@ build-frontend:
 	sed -i.bak "s/__BUILD_HASH__/$(BUILD_HASH)/" cmd/payambar/static/sw.js && rm -f cmd/payambar/static/sw.js.bak
 	@echo "Frontend built in cmd/payambar/static/ (hash: $(BUILD_HASH))"
 
+# Version defaults to 'dev'; override with: make build-backend VERSION=v1.2.0
+VERSION ?= dev
+
 # Build backend with embedded frontend (current OS)
 build-backend: build-frontend
-	@echo "Building backend..."
+	@echo "Building backend (version: $(VERSION))..."
 	mkdir -p bin
-	go build -o bin/payambar ./cmd/payambar
+	go build -ldflags "-X main.Version=$(VERSION)" -o bin/payambar ./cmd/payambar
 
 
 # Build all (current OS only)

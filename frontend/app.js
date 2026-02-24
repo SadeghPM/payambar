@@ -165,6 +165,7 @@ const app = createApp({
                 recipientKeyMeta: {}, // { [userId]: { fetchedAt: number } }
                 noKeyWarnedRecipients: {},
             },
+            appVersion: '',
         };
     },
     computed: {
@@ -193,6 +194,7 @@ const app = createApp({
     },
     mounted() {
         console.log('Vue app mounted');
+        this.fetchAppVersion();
         this.initAuth();
         console.log('Auth state:', { token: !!this.token, userId: this.userId, isAuthed: this.isAuthed });
         if (this.isAuthed) {
@@ -224,6 +226,17 @@ const app = createApp({
         this.cleanupVoiceRecorder();
     },
     methods: {
+        async fetchAppVersion() {
+            try {
+                const res = await fetch(`${API_URL}/version`);
+                if (res.ok) {
+                    const data = await res.json();
+                    this.appVersion = data.version || '';
+                }
+            } catch (e) {
+                console.warn('Failed to fetch app version:', e);
+            }
+        },
         initAuth() {
             const storedToken = localStorage.getItem('token');
             const storedUserId = localStorage.getItem('userId');

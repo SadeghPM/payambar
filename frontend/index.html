@@ -62,6 +62,7 @@
                 <div class="auth-footer">
                     <button type="button" class="link-btn" @click="openRulesModal">مشاهده قوانین</button>
                 </div>
+                <div v-if="appVersion" class="auth-version">{{ appVersion }}</div>
             </div>
         </div>
 
@@ -400,6 +401,7 @@
                         <div class="profile-footer-actions">
                             <button class="btn-primary" @click="saveProfile">ذخیره تغییرات</button>
                         </div>
+                        <div v-if="appVersion" class="profile-version">نسخه {{ appVersion }}</div>
                     </div>
                 </div>
             </div>

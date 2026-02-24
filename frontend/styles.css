@@ -756,13 +756,31 @@ button {
 
 .profile-modal-footer {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
     padding: 0.85rem 1.25rem;
     border-top: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(8px);
-    gap: 0.75rem;
+    gap: 0.5rem;
+}
+
+/* Version badges */
+.auth-version {
+    margin-top: 0.75rem;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    opacity: 0.7;
+    letter-spacing: 0.02em;
+}
+
+.profile-version {
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    opacity: 0.7;
+    letter-spacing: 0.02em;
 }
 
 .profile-footer-actions {

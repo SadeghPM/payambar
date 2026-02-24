@@ -26,6 +26,9 @@ import (
 	"github.com/ulule/limiter/v3/drivers/store/memory"
 )
 
+// Version is set at build time via -ldflags.
+var Version = "dev"
+
 //go:embed static/*
 var staticFS embed.FS
 
@@ -238,6 +241,11 @@ func runServer(cfg *config.Config) error {
 
 		// Push VAPID key (public)
 		api.GET("/push/vapid-key", msgHandler.GetVAPIDKey)
+
+		// Version endpoint (public)
+		api.GET("/version", func(c *gin.Context) {
+			c.JSON(200, gin.H{"version": Version})
+		})
 	}
 
 	// Protected endpoints
@@ -401,7 +409,7 @@ func runServer(cfg *config.Config) error {
 
 	// Start server
 	addr := fmt.Sprintf("0.0.0.0:%s", cfg.Port)
-	log.Printf("Starting server on %s", addr)
+	log.Printf("Payambar %s starting on %s", Version, addr)
 
 	// Setup graceful shutdown
 	sigint := make(chan os.Signal, 1)

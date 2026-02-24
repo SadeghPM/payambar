@@ -26,9 +26,6 @@ jobs:
             install_deps: |
               sudo apt-get update
               sudo apt-get install -y libsqlite3-dev
-            build_cmd: |
-              mkdir -p bin
-              CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-linux-amd64 ./cmd/payambar
 
           - os: ubuntu-24.04-arm
             goos: linux
@@ -38,9 +35,6 @@ jobs:
             install_deps: |
               sudo apt-get update
               sudo apt-get install -y libsqlite3-dev
-            build_cmd: |
-              mkdir -p bin
-              CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-linux-arm64 ./cmd/payambar
           
           - os: macos-latest
             goos: darwin
@@ -50,13 +44,21 @@ jobs:
             install_deps: |
               # macOS runner usually has what's needed, but ensuring deps
               brew install make || true
-            build_cmd: |
-              mkdir -p bin
-              CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags '-s -w' -v -o bin/payambar-darwin-arm64 ./cmd/payambar
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Determine version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "release" ]; then
+          echo "VERSION=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev)" >> $GITHUB_OUTPUT
+        fi
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -74,7 +76,12 @@ jobs:
       run: make test
 
     - name: Build Binary
-      run: ${{ matrix.build_cmd }}
+      run: |
+        mkdir -p bin
+        CGO_ENABLED=1 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+          go build -trimpath \
+          -ldflags "-s -w -X main.Version=${{ steps.version.outputs.VERSION }}" \
+          -v -o bin/${{ matrix.output_name }} ./cmd/payambar
 
     - name: Package Binary
       run: |
