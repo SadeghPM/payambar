@@ -75,8 +75,9 @@ const app = createApp({
             searchQuery: '',
             ws: null,
             wsReconnectAttempts: 0,
-            wsMaxReconnectAttempts: 5,
-            wsReconnectDelay: 3000,
+            wsMaxReconnectAttempts: 50,
+            wsReconnectBaseDelay: 1000,
+            wsReconnectMaxDelay: 30000,
             wsReconnectTimer: null,
             wsIntentionalClose: false,
             wsConnected: false,
@@ -177,6 +178,12 @@ const app = createApp({
             if (this.wsConnected) {
                 return 'آنلاین';
             }
+            if (this.isOffline) {
+                return 'آفلاین';
+            }
+            if (this.wsReconnectAttempts >= this.wsMaxReconnectAttempts) {
+                return 'آفلاین';
+            }
             return 'در حال اتصال...';
         },
         filteredConversations() {
@@ -221,6 +228,17 @@ const app = createApp({
             }
         });
         window.addEventListener('offline', () => { this.isOffline = true; });
+
+        // Reconnect WebSocket when tab becomes visible again
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && this.isAuthed) {
+                if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+                    this.wsReconnectAttempts = 0;
+                    this.serverOffline = false;
+                    this.connectWebSocket();
+                }
+            }
+        });
     },
     beforeUnmount() {
         this.cleanupVoiceRecorder();
@@ -1603,10 +1621,14 @@ const app = createApp({
                 this.serverOffline = true;
                 if (this.wsReconnectAttempts < this.wsMaxReconnectAttempts && this.isAuthed) {
                     this.wsReconnectAttempts++;
+                    const delay = Math.min(
+                        this.wsReconnectBaseDelay * Math.pow(2, this.wsReconnectAttempts - 1),
+                        this.wsReconnectMaxDelay
+                    );
                     this.wsReconnectTimer = setTimeout(() => {
                         this.wsReconnectTimer = null;
                         this.connectWebSocket();
-                    }, this.wsReconnectDelay);
+                    }, delay);
                 }
             };
         },
