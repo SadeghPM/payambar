@@ -14,6 +14,7 @@ import (
 type Service struct {
 	db        *sql.DB
 	jwtSecret string
+	tokenTTL  time.Duration
 }
 
 type Claims struct {
@@ -23,9 +24,18 @@ type Claims struct {
 }
 
 func New(db *sql.DB, jwtSecret string) *Service {
+	return NewWithTokenTTL(db, jwtSecret, 24*time.Hour)
+}
+
+func NewWithTokenTTL(db *sql.DB, jwtSecret string, tokenTTL time.Duration) *Service {
+	if tokenTTL <= 0 {
+		tokenTTL = 24 * time.Hour
+	}
+
 	return &Service{
 		db:        db,
 		jwtSecret: jwtSecret,
+		tokenTTL:  tokenTTL,
 	}
 }
 
@@ -110,7 +120,7 @@ func (s *Service) GenerateToken(userID int, username string) (string, error) {
 		UserID:   userID,
 		Username: username,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.tokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}

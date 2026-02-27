@@ -60,7 +60,7 @@ go mod tidy
 make dev
 
 # Or run directly
-PORT=8080 DATABASE_PATH=/tmp/payambar.db JWT_SECRET=dev-key go run ./cmd/payambar
+PORT=8080 DATABASE_PATH=/tmp/payambar.db JWT_SECRET=dev-key JWT_EXPIRY_LIFETIME=168h go run ./cmd/payambar
 ```
 
 ### 2. Frontend Development
@@ -219,6 +219,8 @@ created_at: TIMESTAMP
 | `ENVIRONMENT` | development | "development" or "production" |
 | `DATABASE_PATH` | /data/payambar.db | SQLite database file |
 | `JWT_SECRET` | (required) | Secret for JWT signing |
+| `JWT_EXPIRY_LIFETIME` | `24h` | JWT lifetime duration (Go duration format, e.g. 12h, 30m) |
+| `JWT_EXPIRY_HOURS` | (legacy) | Backward-compatible fallback (interpreted as hours) |
 | `CORS_ORIGINS` | * | CORS allowed origins |
 | `MAX_UPLOAD_SIZE` | 10485760 | Max file size (bytes) |
 | `FILE_STORAGE_PATH` | /data/uploads | Directory for uploads |
@@ -282,7 +284,7 @@ docker-compose --env-file .env up -d
 ## Security Notes
 
 - Passwords hashed with bcrypt (default cost)
-- JWT tokens expire after 24 hours
+- JWT tokens expire after `JWT_EXPIRY_LIFETIME` (24h by default)
 - WebSocket origin validation (configurable)
 - HTTPS enforced via CDN
 - Input validation on registration (username 3-32 chars, password 6+ chars)

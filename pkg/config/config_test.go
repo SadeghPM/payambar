@@ -18,7 +18,7 @@ func writeEnvFile(t *testing.T, dir string, body string) string {
 func TestLoadReadsExplicitEnvFile(t *testing.T) {
 	for _, key := range []string{
 		"PORT", "ENVIRONMENT", "DATABASE_PATH", "JWT_SECRET", "CORS_ORIGINS", "MAX_UPLOAD_SIZE",
-		"FILE_STORAGE_PATH", "STUN_SERVERS", "TURN_SERVER", "TURN_USERNAME", "TURN_PASSWORD",
+		"FILE_STORAGE_PATH", "STUN_SERVERS", "TURN_SERVER", "TURN_USERNAME", "TURN_PASSWORD", "JWT_EXPIRY_HOURS", "JWT_EXPIRY_LIFETIME",
 	} {
 		_ = os.Unsetenv(key)
 	}
@@ -35,6 +35,7 @@ STUN_SERVERS=stun:example.org:3478
 TURN_SERVER=turn:example.org:3478
 TURN_USERNAME=turn-user
 TURN_PASSWORD=turn-pass
+JWT_EXPIRY_LIFETIME=72h
 `)
 	t.Setenv("PAYAMBAR_ENV_FILE", envPath)
 
@@ -73,6 +74,9 @@ TURN_PASSWORD=turn-pass
 	if cfg.TurnPassword != "turn-pass" {
 		t.Fatalf("TurnPassword = %q", cfg.TurnPassword)
 	}
+	if cfg.JWTExpiryLifetime.Hours() != 72 {
+		t.Fatalf("JWTExpiryLifetime = %v, want 72h", cfg.JWTExpiryLifetime)
+	}
 }
 
 func TestLoadEnvVarOverridesEnvFile(t *testing.T) {
@@ -106,10 +110,27 @@ JWT_SECRET=file-secret
 	}
 }
 
+func TestLoadSupportsLegacyJWTExpiryHours(t *testing.T) {
+	for _, key := range []string{"JWT_EXPIRY_HOURS", "JWT_EXPIRY_LIFETIME"} {
+		_ = os.Unsetenv(key)
+	}
+
+	envPath := writeEnvFile(t, t.TempDir(), `
+JWT_EXPIRY_HOURS=48
+`)
+	t.Setenv("PAYAMBAR_ENV_FILE", envPath)
+
+	cfg := Load()
+
+	if cfg.JWTExpiryLifetime.Hours() != 48 {
+		t.Fatalf("JWTExpiryLifetime = %v, want 48h", cfg.JWTExpiryLifetime)
+	}
+}
+
 func TestLoadFallsBackToDefaultsWhenNoEnvFile(t *testing.T) {
 	for _, key := range []string{
 		"PAYAMBAR_ENV_FILE", "PORT", "ENVIRONMENT", "DATABASE_PATH", "JWT_SECRET", "CORS_ORIGINS", "MAX_UPLOAD_SIZE",
-		"FILE_STORAGE_PATH", "STUN_SERVERS", "TURN_SERVER", "TURN_USERNAME", "TURN_PASSWORD",
+		"FILE_STORAGE_PATH", "STUN_SERVERS", "TURN_SERVER", "TURN_USERNAME", "TURN_PASSWORD", "JWT_EXPIRY_HOURS", "JWT_EXPIRY_LIFETIME",
 	} {
 		_ = os.Unsetenv(key)
 	}
@@ -124,5 +145,8 @@ func TestLoadFallsBackToDefaultsWhenNoEnvFile(t *testing.T) {
 	}
 	if cfg.FileStoragePath != "./data/uploads" {
 		t.Fatalf("FileStoragePath = %q, want default", cfg.FileStoragePath)
+	}
+	if cfg.JWTExpiryLifetime.Hours() != 24 {
+		t.Fatalf("JWTExpiryLifetime = %v, want 24h", cfg.JWTExpiryLifetime)
 	}
 }

@@ -179,7 +179,7 @@ func runServer(cfg *config.Config) error {
 	defer database.Close()
 
 	// Initialize services
-	authSvc := auth.New(database.GetConn(), cfg.JWTSecret)
+	authSvc := auth.NewWithTokenTTL(database.GetConn(), cfg.JWTSecret, cfg.JWTExpiryLifetime)
 
 	// Initialize WebSocket hub
 	hub := ws.NewHub(database.GetConn())

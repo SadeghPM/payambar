@@ -75,8 +75,8 @@ const app = createApp({
             searchQuery: '',
             ws: null,
             wsReconnectAttempts: 0,
-            wsMaxReconnectAttempts: 5,
             wsReconnectDelay: 3000,
+            wsReconnectMaxDelay: 30000,
             wsReconnectTimer: null,
             wsIntentionalClose: false,
             wsConnected: false,
@@ -1550,10 +1550,28 @@ const app = createApp({
                 this.serverOffline = false;
             }
         },
+        isTokenExpired(token) {
+            if (!token || typeof token !== 'string') return true;
+            const parts = token.split('.');
+            if (parts.length !== 3) return false;
+            try {
+                const payloadJson = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+                const payload = JSON.parse(payloadJson);
+                if (!payload?.exp || typeof payload.exp !== 'number') return false;
+                return (Date.now() / 1000) >= payload.exp;
+            } catch {
+                return false;
+            }
+        },
         connectWebSocket() {
             const token = this.token;
             const isTokenValid = typeof token === 'string' && token && token !== 'undefined' && token !== 'null';
             if (!this.isAuthed || !isTokenValid) {
+                return;
+            }
+            if (this.isTokenExpired(token)) {
+                this.clearAuth();
+                this.authError = 'نشست شما منقضی شده است. لطفاً دوباره وارد شوید.';
                 return;
             }
             if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
@@ -1601,12 +1619,13 @@ const app = createApp({
                     return;
                 }
                 this.serverOffline = true;
-                if (this.wsReconnectAttempts < this.wsMaxReconnectAttempts && this.isAuthed) {
+                if (this.isAuthed) {
+                    const delay = Math.min(this.wsReconnectDelay * Math.max(1, this.wsReconnectAttempts+1), this.wsReconnectMaxDelay);
                     this.wsReconnectAttempts++;
                     this.wsReconnectTimer = setTimeout(() => {
                         this.wsReconnectTimer = null;
                         this.connectWebSocket();
-                    }, this.wsReconnectDelay);
+                    }, delay);
                 }
             };
         },

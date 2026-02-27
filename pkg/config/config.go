@@ -6,41 +6,44 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
-	Port            string
-	Environment     string
-	DatabasePath    string
-	JWTSecret       string
-	CORSOrigins     string
-	MaxUploadSize   int64
-	FileStoragePath string
-	StunServers     string
-	TurnServer      string
-	TurnUsername    string
-	TurnPassword    string
-	VAPIDPublicKey  string
-	VAPIDPrivateKey string
+	Port              string
+	Environment       string
+	DatabasePath      string
+	JWTSecret         string
+	CORSOrigins       string
+	MaxUploadSize     int64
+	FileStoragePath   string
+	StunServers       string
+	TurnServer        string
+	TurnUsername      string
+	TurnPassword      string
+	VAPIDPublicKey    string
+	VAPIDPrivateKey   string
+	JWTExpiryLifetime time.Duration
 }
 
 func Load() *Config {
 	fileEnv := loadFileEnv()
 
 	return &Config{
-		Port:            getEnv(fileEnv, "PORT", "8080"),
-		Environment:     getEnv(fileEnv, "ENVIRONMENT", "development"),
-		DatabasePath:    getEnv(fileEnv, "DATABASE_PATH", "./data/payambar.db"),
-		JWTSecret:       getEnv(fileEnv, "JWT_SECRET", "your-secret-key-change-in-production"),
-		CORSOrigins:     getEnv(fileEnv, "CORS_ORIGINS", "*"),
-		MaxUploadSize:   parseInt64(getEnv(fileEnv, "MAX_UPLOAD_SIZE", "10485760")), // 10MB default
-		FileStoragePath: getEnv(fileEnv, "FILE_STORAGE_PATH", "./data/uploads"),
-		StunServers:     getEnv(fileEnv, "STUN_SERVERS", "stun:stun.l.google.com:19302"),
-		TurnServer:      getEnv(fileEnv, "TURN_SERVER", ""),
-		TurnUsername:    getEnv(fileEnv, "TURN_USERNAME", ""),
-		TurnPassword:    getEnv(fileEnv, "TURN_PASSWORD", ""),
-		VAPIDPublicKey:  getEnv(fileEnv, "VAPID_PUBLIC_KEY", ""),
-		VAPIDPrivateKey: getEnv(fileEnv, "VAPID_PRIVATE_KEY", ""),
+		Port:              getEnv(fileEnv, "PORT", "8080"),
+		Environment:       getEnv(fileEnv, "ENVIRONMENT", "development"),
+		DatabasePath:      getEnv(fileEnv, "DATABASE_PATH", "./data/payambar.db"),
+		JWTSecret:         getEnv(fileEnv, "JWT_SECRET", "your-secret-key-change-in-production"),
+		CORSOrigins:       getEnv(fileEnv, "CORS_ORIGINS", "*"),
+		MaxUploadSize:     parseInt64(getEnv(fileEnv, "MAX_UPLOAD_SIZE", "10485760")), // 10MB default
+		FileStoragePath:   getEnv(fileEnv, "FILE_STORAGE_PATH", "./data/uploads"),
+		StunServers:       getEnv(fileEnv, "STUN_SERVERS", "stun:stun.l.google.com:19302"),
+		TurnServer:        getEnv(fileEnv, "TURN_SERVER", ""),
+		TurnUsername:      getEnv(fileEnv, "TURN_USERNAME", ""),
+		TurnPassword:      getEnv(fileEnv, "TURN_PASSWORD", ""),
+		VAPIDPublicKey:    getEnv(fileEnv, "VAPID_PUBLIC_KEY", ""),
+		VAPIDPrivateKey:   getEnv(fileEnv, "VAPID_PRIVATE_KEY", ""),
+		JWTExpiryLifetime: parseJWTExpiryLifetime(fileEnv),
 	}
 }
 
@@ -60,6 +63,30 @@ func parseInt64(s string) int64 {
 		return 10485760 // 10MB default
 	}
 	return val
+}
+
+func parseJWTExpiryLifetime(fileEnv map[string]string) time.Duration {
+	if raw := strings.TrimSpace(getEnv(fileEnv, "JWT_EXPIRY_LIFETIME", "")); raw != "" {
+		return parseJWTDuration(raw)
+	}
+
+	if rawHours := strings.TrimSpace(getEnv(fileEnv, "JWT_EXPIRY_HOURS", "")); rawHours != "" {
+		if _, err := strconv.Atoi(rawHours); err == nil {
+			rawHours += "h"
+		}
+		return parseJWTDuration(rawHours)
+	}
+
+	return 24 * time.Hour
+}
+
+func parseJWTDuration(raw string) time.Duration {
+	duration, err := time.ParseDuration(raw)
+	if err != nil || duration <= 0 {
+		return 24 * time.Hour
+	}
+
+	return duration
 }
 
 func loadFileEnv() map[string]string {
